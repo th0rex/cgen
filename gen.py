@@ -1,0 +1,204 @@
+#!/usr/bin/python
+
+from clang.cindex import *
+
+std_files = [
+    "assert.h",
+    "complex.h",
+    "ctype.h",
+    "errno.h",
+    "fenv.h",
+    "float.h",
+    "inttypes.h",
+    "iso646.h",
+    "limits.h",
+    "locale.h",
+    "math.h",
+    "setjmp.h",
+    "signal.h",
+    "stdalign.h",
+    "stdarg.h",
+    "stdatomic.h",
+    "stdbool.h",
+    "stddef.h",
+    "stdint.h",
+    "stdio.h",
+    "stdlib.h",
+    "stdnoreturn.h",
+    "string.h",
+    "tgmath.h",
+    "threads.h",
+    "time.h",
+    "uchar.h",
+    "wchar.h",
+    "wctype.h",
+]
+
+def parse_args():
+    import sys
+    in_clang_args = False
+    clang_args = []
+    dirs = []
+    for arg in sys.argv[1:]:
+        if arg == "--":
+            in_clang_args = True
+            continue
+
+        if in_clang_args:
+            clang_args.append(arg)
+        else:
+            dirs.append(arg)
+
+    return (dirs, clang_args)
+
+def create_dummy_file(dirs):
+    import os
+
+    with open("dummy.c", mode="w") as dummy:
+        files = [f for d in dirs for f in os.listdir(d) if os.path.isfile(os.path.join(d, f))]
+        files = files + [os.path.join("/usr/include/", f) for f in std_files]
+
+        for f in files:
+            dummy.write("""#include "{}"\n""".format(f))
+
+def get_decls(tu):
+    def base_type(t):
+        while t.kind == TypeKind.POINTER:
+            t = t.get_pointee()
+        return t
+
+    def blocked(t):
+        tbl = [
+            TypeKind.COMPLEX,
+            TypeKind.INT128,
+            TypeKind.WCHAR,
+            TypeKind.UINT128,
+            TypeKind.FLOAT128,
+            TypeKind.HALF,
+            TypeKind.NULLPTR,
+            TypeKind.OVERLOAD,
+            TypeKind.DEPENDENT,
+            TypeKind.LVALUEREFERENCE,
+            TypeKind.RVALUEREFERENCE,
+        ]
+        return t.kind in tbl
+
+    def resolve_type(t):
+        return t.get_canonical()
+
+    def format_type(t):
+        fmt = "{}{}".format("const " if t.is_const_qualified() else "", "volatile " if t.is_volatile_qualified() else "")
+        tbl = {
+            TypeKind.VOID       : lambda: "void",
+            TypeKind.BOOL       : lambda: "bool",
+            TypeKind.CHAR_U     : lambda: "unsigned char",
+            TypeKind.UCHAR      : lambda: "unsigned char",
+            TypeKind.USHORT     : lambda: "unsigned short",
+            TypeKind.UINT       : lambda: "unsigned int",
+            TypeKind.ULONG      : lambda: "unsigned long",
+            TypeKind.ULONGLONG  : lambda: "unsigned long long",
+            TypeKind.CHAR_S     : lambda: "signed char",
+            TypeKind.SCHAR      : lambda: "signed char",
+            TypeKind.SHORT      : lambda: "short",
+            TypeKind.INT        : lambda: "int",
+            TypeKind.LONG       : lambda: "long",
+            TypeKind.LONGLONG   : lambda: "long long",
+            TypeKind.FLOAT      : lambda: "float",
+            TypeKind.DOUBLE     : lambda: "double",
+            TypeKind.LONGDOUBLE : lambda: "long double",
+            TypeKind.ENUM       : lambda: "enum {}".format(t.spelling),
+        }
+
+        if t.kind == TypeKind.POINTER:
+            # Special case
+            # TODO: function pointers
+            return format_type(t.get_pointee()) + "*" + (" const" if t.is_const_qualified() else "") + (" volatile" if t.is_volatile_qualified() else "")
+
+        if t.kind in tbl:
+            return tbl[t.kind]()
+
+        # TODO: not really const correct (if we'd do fmt + t.spelling we would sometimes get two consts, why)
+        return t.spelling
+
+    assert(tu.cursor.kind.is_translation_unit())
+    structs = []
+    functions = []
+    typedefs = []
+    for c in tu.cursor.get_children():
+        if not (c.kind.is_declaration() and c.kind == CursorKind.FUNCTION_DECL):
+            continue
+        ft = c.type
+        assert(ft.kind == TypeKind.FUNCTIONPROTO)
+        if blocked(ft.get_result()):
+            continue
+
+        args = []
+        cont = False
+        for p in c.get_arguments():
+            assert(p.kind == CursorKind.PARM_DECL)
+            a = p.type
+            if blocked(a):
+                cont = True
+                break
+
+            args.append("{}{}".format(format_type(a), " " + p.mangled_name if p.mangled_name != "" else ""))
+
+            bt = base_type(ft.get_result())
+            if a.kind == TypeKind.TYPEDEF and a not in typedefs:
+                typedefs.append(a)
+            elif bt.kind == TypeKind.RECORD and bt not in structs:
+                structs.append(bt.get_declaration())
+
+        if cont:
+            continue
+
+        bt = base_type(ft.get_result())
+        if ft.get_result().kind == TypeKind.TYPEDEF and ft.get_result() not in typedefs:
+            typedefs.append(ft.get_result())
+        elif bt.kind == TypeKind.RECORD and bt not in structs:
+            structs.append(bt.get_declaration())
+
+        ret_type = format_type(ft.get_result())
+
+        functions.append(
+            "{} {}({});".format(ret_type, c.mangled_name, ",".join(args))
+        )
+
+    # Expand typedefs and add references to structs.
+    tds = []
+    for td in typedefs:
+        rt = td.get_canonical()
+        bt = base_type(rt)
+        if bt.kind == TypeKind.RECORD and bt not in structs:
+            structs.append(bt)
+        #if rt.kind == TypeKind.POINTER and bt.kind == TypeKind.FUNCTIONPROTO:
+            # TODO:
+            #tds.append("urgh")
+        #else:
+            #tds.append("typedef {} {};".format(rt.spelling, td.get_typedef_name()))
+        #tds.append(" ".join([t.spelling for t in td.get_declaration().get_tokens()]))
+        #TODO: how can we easily get back the source code line?
+
+
+
+    return functions, structs, tds
+
+def main():
+    dirs, clang_args = parse_args()
+    create_dummy_file(dirs)
+
+    index = Index.create()
+    tu = index.parse("dummy.c", args=clang_args)
+
+    with open("posix.c", "w") as output:
+        fns, structs, typedefs = get_decls(tu)
+        xs = [typedefs, fns]
+        for x in xs:
+            for a in x:
+                output.write(a + "\n")
+            output.write("\n\n")
+
+
+if __name__ == "__main__":
+    main()
+
