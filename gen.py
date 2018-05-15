@@ -338,10 +338,6 @@ def get_decls(tu):
     block = [
         "int8_t", "uint8_t", "int16_t", "uint16_t", "int32_t", "uint32_t", "size_t", "uintptr_t", "offset_t",
         "int64_t", "uint64_t", "ssize_t",
-        # Remove these once bn can do "typedef (struct|union) a a;"
-        "ucontext_t", "_IO_FILE", "pthread_attr_t", "synth_control", "remove_sample", "seq_event_rec",
-        "audio_buf_info", "count_info", "buffmem_desc", "copr_buffer", "copr_debug_buf", "copr_msg", "mixer_info",
-        "_old_mixer_info", "mixer_vol_table"
     ]
     replace = {
         "locale_t": "typedef struct __locale_struct* locale_t;",
@@ -357,6 +353,10 @@ def get_decls(tu):
         elif tdn in replace:
             already.add(tdn)
             tds.append((i, replace[tdn]))
+            continue
+        # TODO: remove once bn can do "typedef (struct|union|enum) a a;"
+        elif tdn == td.type.get_canonical().get_declaration().displayname:
+            already.add(tdn)
             continue
         if tdn in already:
             continue
