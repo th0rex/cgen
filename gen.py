@@ -143,10 +143,12 @@ def get_decls(tu):
         return t.spelling + n
 
     def iter_children(t, tds, sts):
-        if t.kind == TypeKind.RECORD and t.get_declaration().displayname not in sts:
-            sts[t.get_declaration().displayname] = t.get_declaration()
+        if t.kind == TypeKind.RECORD:
+            decl = t.get_declaration()
+            if decl.displayname != "" and decl.displayname not in sts:
+                sts[decl.displayname] = decl
             for c in t.get_fields():
-                iter_children(c, tds, sts)
+                iter_children(c.type, tds, sts)
         elif t.kind == TypeKind.TYPEDEF and t.get_typedef_name() not in tds:
             tds[t.get_typedef_name()] = t
             iter_children(t.get_canonical(), tds, sts)
