@@ -178,12 +178,15 @@ def get_decls(tu):
     def resolve_type(t):
         return t.get_canonical()
 
-    def format_type(t, n = None, expand = False, resolve = False, in_typedef_resolve = False, print_struct_name = True):
+    def format_type(t, n = None, expand = False, resolve = False, in_typedef_resolve = False, print_struct_name = True, c = None):
         fmt = "{}{}".format("const " if t.is_const_qualified() else "", "volatile " if t.is_volatile_qualified() else "")
         n = " " + n if n != None and print_struct_name else ""
-        c = t.get_declaration()
+        if c is None:
+            c = t.get_declaration()
+        # TODO: make this nicer
+        if c.type.kind == TypeKind.ELABORATED:
+            c = t.get_declaration()
         if t.kind == TypeKind.ELABORATED and expand and c.displayname == "":
-            #print(c.kind, c.type.kind, c.type.get_declaration().kind)
             t = c.type
 
         # wtf
@@ -191,23 +194,23 @@ def get_decls(tu):
             return fmt + "size_t"
 
         tbl = {
-            TypeKind.VOID            : lambda: "void",
-            TypeKind.BOOL            : lambda: "bool",
-            TypeKind.CHAR_U          : lambda: "char",
-            TypeKind.UCHAR           : lambda: "unsigned char",
-            TypeKind.USHORT          : lambda: "unsigned short",
-            TypeKind.UINT            : lambda: "unsigned int",
-            TypeKind.ULONG           : lambda: "unsigned long",
-            TypeKind.ULONGLONG       : lambda: "unsigned long long",
-            TypeKind.CHAR_S          : lambda: "char",
-            TypeKind.SCHAR           : lambda: "signed char",
-            TypeKind.SHORT           : lambda: "short",
-            TypeKind.INT             : lambda: "int",
-            TypeKind.LONG            : lambda: "long",
-            TypeKind.LONGLONG        : lambda: "long long",
-            TypeKind.FLOAT           : lambda: "float",
-            TypeKind.DOUBLE          : lambda: "double",
-            TypeKind.LONGDOUBLE      : lambda: "long double",
+            TypeKind.VOID            : "void",
+            TypeKind.BOOL            : "bool",
+            TypeKind.CHAR_U          : "char",
+            TypeKind.UCHAR           : "unsigned char",
+            TypeKind.USHORT          : "unsigned short",
+            TypeKind.UINT            : "unsigned int",
+            TypeKind.ULONG           : "unsigned long",
+            TypeKind.ULONGLONG       : "unsigned long long",
+            TypeKind.CHAR_S          : "char",
+            TypeKind.SCHAR           : "signed char",
+            TypeKind.SHORT           : "short",
+            TypeKind.INT             : "int",
+            TypeKind.LONG            : "long",
+            TypeKind.LONGLONG        : "long long",
+            TypeKind.FLOAT           : "float",
+            TypeKind.DOUBLE          : "double",
+            TypeKind.LONGDOUBLE      : "long double",
         }
 
         if t.kind == TypeKind.POINTER:
@@ -231,16 +234,13 @@ def get_decls(tu):
             return "typedef {};".format(format_type(t.get_declaration().underlying_typedef_type, n=t.get_typedef_name(), expand=True, in_typedef_resolve=True))
         elif t.kind == TypeKind.RECORD:
             ty = "struct"
-            if t.get_declaration().kind == CursorKind.UNION_DECL:
+            if c.kind == CursorKind.UNION_DECL:
                 ty = "union"
-
-            #if in_typedef_resolve and t.get_declaration().displayname != "":
-            #    return "{} {}{}".format(ty, t.get_declaration().displayname, n)
 
             return "{}{}{{\n{}}}{}".format(
                     ty,
-                    n if not in_typedef_resolve else (" " + t.get_declaration().displayname if in_typedef_resolve and t.get_declaration().displayname != "" else ""),
-                    "".join([format_type(c.type, expand=expand, n=c.displayname, in_typedef_resolve = True) + ";\n" for c in t.get_fields()]),
+                    n if not in_typedef_resolve else (" " + c.displayname if in_typedef_resolve and c.displayname != "" else ""),
+                    "".join([format_type(c.type, c=c, expand=expand, n=c.displayname, in_typedef_resolve = True) + ";\n" for c in t.get_fields()]),
                     n if in_typedef_resolve else "")
         elif t.kind == TypeKind.TYPEDEF:
             return fmt + t.get_typedef_name() + n
@@ -257,7 +257,9 @@ def get_decls(tu):
                     ",\n".join(["{} = {}".format(x.displayname, x.enum_value if x.enum_value >= 0 else 2**(8*c.enum_type.get_size()) - x.enum_value) for x in c.get_children()]),
                     n if in_typedef_resolve else "")
         elif t.kind in tbl:
-            return fmt + tbl[t.kind]() + n
+            if c.is_bitfield() and c.displayname == "":
+                return fmt + tbl[t.kind] + " padding_{}".format(c.get_field_offsetof())
+            return fmt + tbl[t.kind] + n
         elif t.kind == TypeKind.UNEXPOSED:
             s = t.spelling.split(" ")
             r = s[0] + "(*" + n + ")" + " ".join(s[1:])
@@ -360,21 +362,15 @@ def get_decls(tu):
 
     strcts = []
     already = set()
-    replace = set([
-        # Can be removed once bn supports empty structs/unions:
-        "_IO_FILE", "ucontext_t", "_IO_jump_t", "_IO_FILE_plus", "__dirstream",
-        "__acl_ext", "__acl_entry_ext", "__acl_permset_ext",
-        "_cap_struct", "prof", "shmid_ds", "iovec", "msghdr", "cmsghdr",
-        "__sysctl_args",
-    ])
     for i, st in structs:
         if st.displayname == "":
             continue
         if st.displayname in already:
             continue
-        if st.displayname in replace:
-            strcts.append((i, "struct {} {{ void* __unused; }};".format(st.displayname)))
+        # Can be removed once bn supports empty structs/unions:
+        if len(list(st.type.get_fields())) == 0:
             already.add(st.displayname)
+            strcts.append((i, "struct {} {{ void* __unused; }};".format(st.displayname)))
             continue
         already.add(st.displayname)
         strcts.append((i, format_type(st.type, n=st.displayname, expand=True) + ";"))
