@@ -34,6 +34,97 @@ std_files = [
     "wctype.h",
 ]
 
+linux_files = [
+    "dirent.h"
+    "sys/acct.h",
+    "sys/acl.h",
+    "sys/asoundlib.h",
+    "sys/auxv.h",
+    "sys/bitypes.h",
+    "sys/capability.h",
+    "sys/cdefs.h",
+    "sys/debugreg.h",
+    "sys/dir.h",
+    "sys/elf.h",
+    "sys/epoll.h",
+    "sys/errno.h",
+    "sys/eventfd.h",
+    "sys/fanotify.h",
+    "sys/fcntl.h",
+    "sys/file.h",
+    "sys/fsuid.h",
+    "sys/gmon.h",
+    "sys/gmon_out.h",
+    "sys/inotify.h",
+    "sys/ioctl.h",
+    "sys/io.h",
+    "sys/ipc.h",
+    "sys/kd.h",
+    "sys/klog.h",
+    "sys/mman.h",
+    "sys/mount.h",
+    "sys/msg.h",
+    "sys/mtio.h",
+    "sys/param.h",
+    "sys/pci.h",
+    "sys/perm.h",
+    "sys/personality.h",
+    "sys/poll.h",
+    "sys/prctl.h",
+    "sys/procfs.h",
+    "sys/profil.h",
+    "sys/ptrace.h",
+    "sys/queue.h",
+    "sys/quota.h",
+    "sys/random.h",
+    "sys/raw.h",
+    "sys/reboot.h",
+    "sys/reg.h",
+    "sys/resource.h",
+    "sys/select.h",
+    "sys/sem.h",
+    "sys/sendfile.h",
+    "sys/shm.h",
+    "sys/signalfd.h",
+    "sys/signal.h",
+    "sys/socket.h",
+    "sys/socketvar.h",
+    "sys/soundcard.h",
+    "sys/statfs.h",
+    "sys/stat.h",
+    "sys/statvfs.h",
+    "sys/stropts.h",
+    "sys/swap.h",
+    "sys/syscall.h",
+    "sys/sysctl.h",
+    "sys/sysinfo.h",
+    "sys/syslog.h",
+    "sys/sysmacros.h",
+    "sys/termios.h",
+    "sys/timeb.h",
+    "sys/time.h",
+    "sys/timerfd.h",
+    "sys/times.h",
+    "sys/timex.h",
+    "sys/ttychars.h",
+    "sys/ttydefaults.h",
+    "sys/types.h",
+    "sys/ucontext.h",
+    "sys/uio.h",
+    "sys/un.h",
+    "sys/unistd.h",
+    "sys/user.h",
+    "sys/ustat.h",
+    "sys/utsname.h",
+    "sys/vfs.h",
+    "sys/vlimit.h",
+    "sys/vm86.h",
+    "sys/vt.h",
+    "sys/vtimes.h",
+    "sys/wait.h",
+    "sys/xattr.h",
+]
+
 def parse_args():
     import sys
     in_clang_args = False
@@ -57,6 +148,7 @@ def create_dummy_file(dirs):
     with open("dummy.c", mode="w") as dummy:
         files = [f for d in dirs for f in os.listdir(d) if os.path.isfile(os.path.join(d, f))]
         files = files + [os.path.join("/usr/include/", f) for f in std_files]
+        files = files + [os.path.join("/usr/include/", f) for f in linux_files]
 
         for f in files:
             dummy.write("""#include "{}"\n""".format(f))
@@ -116,7 +208,6 @@ def get_decls(tu):
             TypeKind.FLOAT           : lambda: "float",
             TypeKind.DOUBLE          : lambda: "double",
             TypeKind.LONGDOUBLE      : lambda: "long double",
-            TypeKind.ENUM            : lambda: "enum {}".format(t.spelling),
         }
 
         if t.kind == TypeKind.POINTER:
@@ -159,6 +250,8 @@ def get_decls(tu):
             return format_type(t.element_type, expand=expand, print_struct_name = False) + n + "[{}]".format(t.element_count)
         elif t.kind == TypeKind.ELABORATED:
             return t.spelling + n
+        elif c.kind == CursorKind.ENUM_DECL:
+            return "enum {}{{\n{}}}".format(n, "".join(["{} = {},\n".format(x.displayname, x.enum_value) for x in c.get_children()]))
         elif t.kind in tbl:
             return fmt + tbl[t.kind]() + n
         elif t.kind == TypeKind.UNEXPOSED:
@@ -170,20 +263,21 @@ def get_decls(tu):
         print("Not handled: ", t.kind, ": ", t.spelling)
         assert(False)
 
-    def iter_children(t, sts):
+    def iter_children(i, t, sts):
         if t.kind == TypeKind.ELABORATED:
             t = t.get_declaration().type
 
         if t.kind == TypeKind.RECORD:
             decl = t.get_declaration()
-            sts.append((-1, decl))
+            sts.append((i-1, decl))
         elif t.kind == TypeKind.TYPEDEF:
-            iter_children(t.get_canonical(), sts)
+            iter_children(i, t.get_canonical(), sts)
 
     assert(tu.cursor.kind.is_translation_unit())
     structs = []
     functions = []
     typedefs = []
+    enums = []
     already = set()
     for i, c in enumerate(tu.cursor.get_children()):
         # TODO: first add all structs and typedefs and what not as well.
@@ -193,7 +287,9 @@ def get_decls(tu):
             structs.append((i, c))
         elif c.kind == CursorKind.TYPEDEF_DECL:
             typedefs.append((i, c))
-            iter_children(c.type, structs)
+            iter_children(i, c.type, structs)
+        elif c.kind == CursorKind.ENUM_DECL:
+            enums.append((i, c))
         if not (c.kind.is_declaration() and c.kind == CursorKind.FUNCTION_DECL):
             continue
         ft = c.type
@@ -216,6 +312,9 @@ def get_decls(tu):
 
             args.append(format_type(a, n=p.mangled_name))
 
+        if ft.is_function_variadic():
+            args.append("...")
+
         if cont:
             continue
 
@@ -228,7 +327,7 @@ def get_decls(tu):
     # Expand typedefs and add references to structs.
     tds = []
     block = [
-        "int8_t", "uint8_t", "int16_t", "uint16_t", "int32_t", "uint32_t", "size_t", "uintptr_t", "intptr_t", "offset_t",
+        "int8_t", "uint8_t", "int16_t", "uint16_t", "int32_t", "uint32_t", "size_t", "uintptr_t", "offset_t",
         "int64_t", "uint64_t", "ssize_t",
         # Remove these once bn can do "typedef (struct|union) a a;"
         "ucontext_t", "_IO_FILE", "pthread_attr_t",
@@ -255,26 +354,41 @@ def get_decls(tu):
 
     strcts = []
     already = set()
-    replace = {
-        "_IO_FILE": "struct _IO_FILE { void* __unused; };",
-        "ucontext_t": "struct ucontext_t { void* __unused; };",
-        "_IO_jump_t": "struct _IO_jump_t { void* __unused; };",
-        "_IO_FILE_plus": "struct _IO_FILE_plus { void* __unused; };",
-    }
+    replace = set([
+        # Can be removed once bn supports empty structs/unions:
+        "_IO_FILE",
+        "ucontext_t",
+        "_IO_jump_t",
+        "_IO_FILE_plus",
+        "__dirstream",
+        "__acl_ext",
+        "__acl_entry_ext",
+        "__acl_permset_ext",
+        "_snd_async_handler",
+        "snd_shm_area",
+        "_snd_input",
+        "_snd_output",
+    ])
     for i, st in structs:
         if st.displayname == "":
             continue
         if st.displayname in already:
             continue
         if st.displayname in replace:
-            strcts.append((i, replace[st.displayname]))
+            strcts.append((i, "struct {} {{ void* __unused; }};".format(st.displayname)))
             already.add(st.displayname)
             continue
         already.add(st.displayname)
         strcts.append((i, format_type(st.type, n=st.displayname, expand=True) + ";"))
 
+    already = set()
+    enms = []
+    for i, en in enums:
+        if en.displayname == "":
+            continue
+        enms.append((i, format_type(en.type, n=en.displayname, expand=True) + ";"))
 
-    return functions, strcts, tds
+    return functions, strcts, tds, enms
 
 def main():
     dirs, clang_args = parse_args()
@@ -284,9 +398,9 @@ def main():
     tu = index.parse("dummy.c", args=clang_args)
 
     with open("posix.c", "w") as output:
-        fns, structs, typedefs = get_decls(tu)
+        fns, structs, typedefs, enums = get_decls(tu)
         # TODO: build tree and return it so that we can print them in proper order
-        xs = sorted(fns + structs + typedefs, key=lambda i: i[0])
+        xs = sorted(fns + structs + typedefs + enums, key=lambda i: i[0])
         output.write("struct __locale_data { void* __unused; };\n")
         for _, x in xs:
             output.write(x + "\n")
