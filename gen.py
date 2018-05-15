@@ -259,6 +259,9 @@ def get_decls(tu):
         elif t.kind in tbl:
             if c.is_bitfield() and c.displayname == "":
                 return fmt + tbl[t.kind] + " padding_{}".format(c.get_field_offsetof())
+            # TODO: enable when binaryninja supports bitfields
+            #elif c.is_bitfield():
+            #    return fmt + tbl[t.kind] + "{}:{}".format(n, c.get_bitfield_width())
             return fmt + tbl[t.kind] + n
         elif t.kind == TypeKind.UNEXPOSED:
             s = t.spelling.split(" ")
