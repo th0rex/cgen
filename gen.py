@@ -38,7 +38,7 @@ linux_files = [
     "dirent.h"
     "sys/acct.h",
     "sys/acl.h",
-    "sys/asoundlib.h",
+    #"sys/asoundlib.h",
     "sys/auxv.h",
     "sys/bitypes.h",
     "sys/capability.h",
@@ -245,13 +245,17 @@ def get_decls(tu):
         elif t.kind == TypeKind.TYPEDEF:
             return fmt + t.get_typedef_name() + n
         elif t.kind == TypeKind.INCOMPLETEARRAY:
-            return format_type(t.element_type, expand=expand, print_struct_name = False) + n + "[]"
+            return format_type(t.element_type, expand=expand, print_struct_name = False) + n + "[1]"
         elif t.kind == TypeKind.CONSTANTARRAY:
             return format_type(t.element_type, expand=expand, print_struct_name = False) + n + "[{}]".format(t.element_count)
         elif t.kind == TypeKind.ELABORATED:
             return t.spelling + n
         elif c.kind == CursorKind.ENUM_DECL:
-            return "enum {}{{\n{}}}".format(n, "".join(["{} = {},\n".format(x.displayname, x.enum_value) for x in c.get_children()]))
+            return "enum{}{{\n{}\n}}{}".format(
+                    n if not in_typedef_resolve else "", 
+                    # TODO: cleanup when bn supports negative enum values
+                    ",\n".join(["{} = {}".format(x.displayname, x.enum_value if x.enum_value >= 0 else 2**(8*c.enum_type.get_size()) - x.enum_value) for x in c.get_children()]),
+                    n if in_typedef_resolve else "")
         elif t.kind in tbl:
             return fmt + tbl[t.kind]() + n
         elif t.kind == TypeKind.UNEXPOSED:
@@ -330,7 +334,9 @@ def get_decls(tu):
         "int8_t", "uint8_t", "int16_t", "uint16_t", "int32_t", "uint32_t", "size_t", "uintptr_t", "offset_t",
         "int64_t", "uint64_t", "ssize_t",
         # Remove these once bn can do "typedef (struct|union) a a;"
-        "ucontext_t", "_IO_FILE", "pthread_attr_t",
+        "ucontext_t", "_IO_FILE", "pthread_attr_t", "synth_control", "remove_sample", "seq_event_rec",
+        "audio_buf_info", "count_info", "buffmem_desc", "copr_buffer", "copr_debug_buf", "copr_msg", "mixer_info",
+        "_old_mixer_info", "mixer_vol_table"
     ]
     replace = {
         "locale_t": "typedef struct __locale_struct* locale_t;",
@@ -356,18 +362,10 @@ def get_decls(tu):
     already = set()
     replace = set([
         # Can be removed once bn supports empty structs/unions:
-        "_IO_FILE",
-        "ucontext_t",
-        "_IO_jump_t",
-        "_IO_FILE_plus",
-        "__dirstream",
-        "__acl_ext",
-        "__acl_entry_ext",
-        "__acl_permset_ext",
-        "_snd_async_handler",
-        "snd_shm_area",
-        "_snd_input",
-        "_snd_output",
+        "_IO_FILE", "ucontext_t", "_IO_jump_t", "_IO_FILE_plus", "__dirstream",
+        "__acl_ext", "__acl_entry_ext", "__acl_permset_ext",
+        "_cap_struct", "prof", "shmid_ds", "iovec", "msghdr", "cmsghdr",
+        "__sysctl_args",
     ])
     for i, st in structs:
         if st.displayname == "":
