@@ -90,9 +90,13 @@ def get_decls(tu):
         fmt = "{}{}".format("const " if t.is_const_qualified() else "", "volatile " if t.is_volatile_qualified() else "")
         n = " " + n if n != None and print_struct_name else ""
         c = t.get_declaration()
-        if t.kind == TypeKind.ELABORATED and expand:
+        if t.kind == TypeKind.ELABORATED and expand and c.displayname == "":
             #print(c.kind, c.type.kind, c.type.get_declaration().kind)
             t = c.type
+
+        # wtf
+        if t.kind == TypeKind.INT and n is not None and n == " size_t":
+            return fmt + "size_t"
 
         tbl = {
             TypeKind.VOID            : lambda: "void",
@@ -129,20 +133,23 @@ def get_decls(tu):
                 (" volatile" if t.is_volatile_qualified() else "") + \
                 n
         elif t.kind == TypeKind.TYPEDEF and resolve:
-            return "typedef {};".format(format_type(t.get_canonical(), n=t.get_typedef_name(), expand=True, in_typedef_resolve=True))
+            if t.get_canonical().kind == TypeKind.FUNCTIONPROTO:
+                # Fuck gnu libc for using this feature
+                return ""
+            #print(t.get_declaration().get_definition().type.kind, t.get_declaration().underlying_typedef_type.displayname)
+            return "typedef {};".format(format_type(t.get_declaration().underlying_typedef_type, n=t.get_typedef_name(), expand=True, in_typedef_resolve=True))
         elif t.kind == TypeKind.RECORD:
             ty = "struct"
             if t.get_declaration().kind == CursorKind.UNION_DECL:
                 ty = "union"
-            #if c is not None and c.displayname != "" and in_typedef_resolve:
-            #    return "{}{}{}".format(ty, c.displayname, n)
-            #if not resolve:
-            #    return "{} {}{}".format(ty, c.displayname, n)
+
+            #if in_typedef_resolve and t.get_declaration().displayname != "":
+            #    return "{} {}{}".format(ty, t.get_declaration().displayname, n)
 
             return "{}{}{{\n{}}}{}".format(
                     ty,
-                    n if not in_typedef_resolve else "",
-                    "".join([format_type(c.type, expand=expand, n=c.displayname) + ";\n" for c in t.get_fields()]),
+                    n if not in_typedef_resolve else (" " + t.get_declaration().displayname if in_typedef_resolve and t.get_declaration().displayname != "" else ""),
+                    "".join([format_type(c.type, expand=expand, n=c.displayname, in_typedef_resolve = True) + ";\n" for c in t.get_fields()]),
                     n if in_typedef_resolve else "")
         elif t.kind == TypeKind.TYPEDEF:
             return fmt + t.get_typedef_name() + n
@@ -151,8 +158,7 @@ def get_decls(tu):
         elif t.kind == TypeKind.CONSTANTARRAY:
             return format_type(t.element_type, expand=expand, print_struct_name = False) + n + "[{}]".format(t.element_count)
         elif t.kind == TypeKind.ELABORATED:
-            print("ELABORATED: ", t.spelling)
-            return t.spelling
+            return t.spelling + n
         elif t.kind in tbl:
             return fmt + tbl[t.kind]() + n
         elif t.kind == TypeKind.UNEXPOSED:
@@ -164,37 +170,40 @@ def get_decls(tu):
         print("Not handled: ", t.kind, ": ", t.spelling)
         assert(False)
 
-    def iter_children(t, tds, sts):
+    def iter_children(t, sts):
         if t.kind == TypeKind.ELABORATED:
             t = t.get_declaration().type
 
         if t.kind == TypeKind.RECORD:
             decl = t.get_declaration()
-            if decl.displayname != "" and decl.displayname not in sts:
-                sts[decl.displayname] = decl
-            for c in t.get_fields():
-                iter_children(c.type, tds, sts)
-        elif t.kind == TypeKind.TYPEDEF and t.get_typedef_name() not in tds:
-            tds[t.get_typedef_name()] = t
-            iter_children(t.get_canonical(), tds, sts)
-        elif t.kind == TypeKind.POINTER:
-            iter_children(base_type(t), tds, sts)
-        elif t.kind == TypeKind.FUNCTIONPROTO:
-            iter_children(t.get_result(), tds, sts)
-            for a in t.argument_types():
-                iter_children(a, tds, sts)
+            sts.append((-1, decl))
+        elif t.kind == TypeKind.TYPEDEF:
+            iter_children(t.get_canonical(), sts)
 
     assert(tu.cursor.kind.is_translation_unit())
-    structs = {}
+    structs = []
     functions = []
-    typedefs = {}
-    for c in tu.cursor.get_children():
+    typedefs = []
+    already = set()
+    for i, c in enumerate(tu.cursor.get_children()):
+        # TODO: first add all structs and typedefs and what not as well.
+        # Then filter whether they're used (i.e. insert them with used=False
+        # and use iter_children to set used to True).
+        if c.kind == CursorKind.STRUCT_DECL:
+            structs.append((i, c))
+        elif c.kind == CursorKind.TYPEDEF_DECL:
+            typedefs.append((i, c))
+            iter_children(c.type, structs)
         if not (c.kind.is_declaration() and c.kind == CursorKind.FUNCTION_DECL):
             continue
         ft = c.type
         assert(ft.kind == TypeKind.FUNCTIONPROTO)
         if blocked(ft.get_result()):
             continue
+
+        if c.displayname in already:
+            continue
+        already.add(c.displayname)
 
         args = []
         cont = False
@@ -210,24 +219,59 @@ def get_decls(tu):
         if cont:
             continue
 
-        iter_children(ft, typedefs, structs)
-
         ret_type = format_type(ft.get_result())
 
         functions.append(
-            "{} {}({});".format(ret_type, c.mangled_name, ",".join(args))
+            (i, "{} {}({});".format(ret_type, c.mangled_name, ",".join(args)))
         )
 
     # Expand typedefs and add references to structs.
     tds = []
-    for _, td in typedefs.items():
-        # TODO: if the typedef is something like "typdef struct a b;" then don't expand the struct!
-        tds.append(format_type(td, resolve=True))
+    block = [
+        "int8_t", "uint8_t", "int16_t", "uint16_t", "int32_t", "uint32_t", "size_t", "uintptr_t", "intptr_t", "offset_t",
+        "int64_t", "uint64_t", "ssize_t",
+        # Remove these once bn can do "typedef (struct|union) a a;"
+        "ucontext_t", "_IO_FILE", "pthread_attr_t",
+    ]
+    replace = {
+        "locale_t": "typedef struct __locale_struct* locale_t;",
+        "sigval_t": "typedef __sigval_t sigval_t;",
+        "stack_t": "typedef struct { void* __unused; } stack_t;",
+        "_IO_lock_t": "typedef void* _IO_lock_t;",
+    }
+    already = set()
+    for i, td in typedefs:
+        tdn = td.type.get_typedef_name()
+        if tdn in block:
+            continue
+        elif tdn in replace:
+            already.add(tdn)
+            tds.append((i, replace[tdn]))
+            continue
+        if tdn in already:
+            continue
+        already.add(tdn)
+        tds.append((i, format_type(td.type, resolve=True)))
 
     strcts = []
-    for _, st in structs.items():
-        if st.displayname != "":
-            strcts.append(format_type(st.type, n=st.displayname, expand=True) + ";")
+    already = set()
+    replace = {
+        "_IO_FILE": "struct _IO_FILE { void* __unused; };",
+        "ucontext_t": "struct ucontext_t { void* __unused; };",
+        "_IO_jump_t": "struct _IO_jump_t { void* __unused; };",
+        "_IO_FILE_plus": "struct _IO_FILE_plus { void* __unused; };",
+    }
+    for i, st in structs:
+        if st.displayname == "":
+            continue
+        if st.displayname in already:
+            continue
+        if st.displayname in replace:
+            strcts.append((i, replace[st.displayname]))
+            already.add(st.displayname)
+            continue
+        already.add(st.displayname)
+        strcts.append((i, format_type(st.type, n=st.displayname, expand=True) + ";"))
 
 
     return functions, strcts, tds
@@ -242,12 +286,10 @@ def main():
     with open("posix.c", "w") as output:
         fns, structs, typedefs = get_decls(tu)
         # TODO: build tree and return it so that we can print them in proper order
-        xs = [structs, typedefs, fns]
-        for x in xs:
-            for a in x:
-                output.write(a + "\n")
-            output.write("\n\n")
-
+        xs = sorted(fns + structs + typedefs, key=lambda i: i[0])
+        output.write("struct __locale_data { void* __unused; };\n")
+        for _, x in xs:
+            output.write(x + "\n")
 
 if __name__ == "__main__":
     main()
