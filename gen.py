@@ -123,7 +123,7 @@ def get_decls(tu):
             return "typedef {};".format(format_type(t.get_canonical(), n=t.get_typedef_name(), in_typedef_resolve=True))
         elif t.kind in tbl:
             return fmt + tbl[t.kind]() + n
-        elif t.kind == TypeKind.RECORD or (c is not None and c.kind == CursorKind.FIELD_DECL and c.type.get_declaration().type == TypeKind.RECORD):
+        elif t.kind == TypeKind.RECORD or (c is not None and c.kind == CursorKind.FIELD_DECL and c.type.get_declaration().type.kind == TypeKind.RECORD):
             ty = "struct"
             rt = None
             if c is not None and c.kind == CursorKind.FIELD_DECL:
@@ -131,7 +131,6 @@ def get_decls(tu):
                 if rt.kind == CursorKind.UNION_DECL:
                     ty = "union"
             if rt is not None:
-                print(rt.kind)
                 t = rt
                 in_typedef_resolve = True
             return "{}{}{{\n{}}}{}".format(
@@ -158,6 +157,10 @@ def get_decls(tu):
             iter_children(t.get_result(), tds, sts)
             for a in t.argument_types():
                 iter_children(a, tds, sts)
+        else:
+            decl = t.get_declaration()
+            if decl.kind == CursorKind.UNION_DECL or decl.kind == CursorKind.STRUCT_DECL:
+                iter_children(decl.type, tds, sts)
 
     assert(tu.cursor.kind.is_translation_unit())
     structs = {}
@@ -224,6 +227,7 @@ def main():
 
     with open("posix.c", "w") as output:
         fns, structs, typedefs = get_decls(tu)
+        # TODO: build tree and return it so that we can print them in proper order
         xs = [structs, typedefs, fns]
         for x in xs:
             for a in x:
