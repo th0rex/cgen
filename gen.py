@@ -86,18 +86,19 @@ def get_decls(tu):
     def resolve_type(t):
         return t.get_canonical()
 
-    def format_type(t):
+    def format_type(t, n = None, resolve_typedefs = False, in_typedef_resolve = False, c =None):
         fmt = "{}{}".format("const " if t.is_const_qualified() else "", "volatile " if t.is_volatile_qualified() else "")
+        n = " " + n if n != None else ""
         tbl = {
             TypeKind.VOID       : lambda: "void",
             TypeKind.BOOL       : lambda: "bool",
-            TypeKind.CHAR_U     : lambda: "unsigned char",
+            TypeKind.CHAR_U     : lambda: "char",
             TypeKind.UCHAR      : lambda: "unsigned char",
             TypeKind.USHORT     : lambda: "unsigned short",
             TypeKind.UINT       : lambda: "unsigned int",
             TypeKind.ULONG      : lambda: "unsigned long",
             TypeKind.ULONGLONG  : lambda: "unsigned long long",
-            TypeKind.CHAR_S     : lambda: "signed char",
+            TypeKind.CHAR_S     : lambda: "char",
             TypeKind.SCHAR      : lambda: "signed char",
             TypeKind.SHORT      : lambda: "short",
             TypeKind.INT        : lambda: "int",
@@ -112,13 +113,49 @@ def get_decls(tu):
         if t.kind == TypeKind.POINTER:
             # Special case
             # TODO: function pointers
-            return format_type(t.get_pointee()) + "*" + (" const" if t.is_const_qualified() else "") + (" volatile" if t.is_volatile_qualified() else "")
+            return format_type(t.get_pointee()) + "*" + \
+                (" const" if t.is_const_qualified() else "") + \
+                (" volatile" if t.is_volatile_qualified() else "") + \
+                n
+        elif t.kind == TypeKind.CONSTANTARRAY:
+            return format_type(t.element_type) + n + "[{}]".format(t.element_count)
+        elif t.kind == TypeKind.TYPEDEF and resolve_typedefs:
+            return "typedef {};".format(format_type(t.get_canonical(), n=t.get_typedef_name(), in_typedef_resolve=True))
+        elif t.kind in tbl:
+            return fmt + tbl[t.kind]() + n
+        elif t.kind == TypeKind.RECORD or (c is not None and c.kind == CursorKind.FIELD_DECL and c.type.get_declaration().type == TypeKind.RECORD):
+            ty = "struct"
+            rt = None
+            if c is not None and c.kind == CursorKind.FIELD_DECL:
+                rt = c.type.get_declaration().type
+                if rt.kind == CursorKind.UNION_DECL:
+                    ty = "union"
+            if rt is not None:
+                print(rt.kind)
+                t = rt
+                in_typedef_resolve = True
+            return "{}{}{{\n{}}}{}".format(
+                    ty,
+                    n if not in_typedef_resolve else "",
+                    "".join([format_type(c.type, n=c.displayname, c=c) + ";\n" for c in t.get_fields()]),
+                    n if in_typedef_resolve else "")
 
-        if t.kind in tbl:
-            return tbl[t.kind]()
+        return t.spelling + n
 
-        # TODO: not really const correct (if we'd do fmt + t.spelling we would sometimes get two consts, why)
-        return t.spelling
+    def iter_children(t, tds, sts):
+        if t.kind == TypeKind.RECORD and t.get_declaration() not in sts:
+            sts.append(t.get_declaration())
+            for c in t.get_fields():
+                iter_children(c, tds, sts)
+        elif t.kind == TypeKind.TYPEDEF and t not in tds:
+            tds.append(t)
+            iter_children(t.get_canonical(), tds, sts)
+        elif t.kind == TypeKind.POINTER:
+            iter_children(base_type(t), tds, sts)
+        elif t.kind == TypeKind.FUNCTIONPROTO:
+            iter_children(t.get_result(), tds, sts)
+            for a in t.argument_types():
+                iter_children(a, tds, sts)
 
     assert(tu.cursor.kind.is_translation_unit())
     structs = []
@@ -141,22 +178,12 @@ def get_decls(tu):
                 cont = True
                 break
 
-            args.append("{}{}".format(format_type(a), " " + p.mangled_name if p.mangled_name != "" else ""))
-
-            bt = base_type(ft.get_result())
-            if a.kind == TypeKind.TYPEDEF and a not in typedefs:
-                typedefs.append(a)
-            elif bt.kind == TypeKind.RECORD and bt not in structs:
-                structs.append(bt.get_declaration())
+            args.append(format_type(a, n=p.mangled_name))
 
         if cont:
             continue
 
-        bt = base_type(ft.get_result())
-        if ft.get_result().kind == TypeKind.TYPEDEF and ft.get_result() not in typedefs:
-            typedefs.append(ft.get_result())
-        elif bt.kind == TypeKind.RECORD and bt not in structs:
-            structs.append(bt.get_declaration())
+        iter_children(ft, typedefs, structs)
 
         ret_type = format_type(ft.get_result())
 
@@ -169,19 +196,23 @@ def get_decls(tu):
     for td in typedefs:
         rt = td.get_canonical()
         bt = base_type(rt)
-        if bt.kind == TypeKind.RECORD and bt not in structs:
-            structs.append(bt)
-        #if rt.kind == TypeKind.POINTER and bt.kind == TypeKind.FUNCTIONPROTO:
-            # TODO:
-            #tds.append("urgh")
-        #else:
-            #tds.append("typedef {} {};".format(rt.spelling, td.get_typedef_name()))
-        #tds.append(" ".join([t.spelling for t in td.get_declaration().get_tokens()]))
-        #TODO: how can we easily get back the source code line?
+        if rt.kind == TypeKind.POINTER and bt.kind == TypeKind.FUNCTIONPROTO:
+            tds.append("typedef {}(*{})({});".format(
+                format_type(bt.get_result()),
+                td.get_typedef_name(),
+                ", ".join([format_type(t) for t in bt.argument_types()])
+            ))
+        else:
+            #tds.append("typedef {} {};".format(format_type(rt), td.get_typedef_name()))
+            tds.append(format_type(td, resolve_typedefs=True))
+
+    strcts = []
+    for st in structs:
+        if st.displayname != "":
+            strcts.append(format_type(st.type, n=st.displayname) + ";")
 
 
-
-    return functions, structs, tds
+    return functions, strcts, tds
 
 def main():
     dirs, clang_args = parse_args()
@@ -192,7 +223,7 @@ def main():
 
     with open("posix.c", "w") as output:
         fns, structs, typedefs = get_decls(tu)
-        xs = [typedefs, fns]
+        xs = [structs, typedefs, fns]
         for x in xs:
             for a in x:
                 output.write(a + "\n")
