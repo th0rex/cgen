@@ -86,62 +86,88 @@ def get_decls(tu):
     def resolve_type(t):
         return t.get_canonical()
 
-    def format_type(t, n = None, resolve_typedefs = False, in_typedef_resolve = False, c =None):
+    def format_type(t, n = None, expand = False, resolve = False, in_typedef_resolve = False, print_struct_name = True):
         fmt = "{}{}".format("const " if t.is_const_qualified() else "", "volatile " if t.is_volatile_qualified() else "")
-        n = " " + n if n != None else ""
+        n = " " + n if n != None and print_struct_name else ""
+        c = t.get_declaration()
+        if t.kind == TypeKind.ELABORATED and expand:
+            #print(c.kind, c.type.kind, c.type.get_declaration().kind)
+            t = c.type
+
         tbl = {
-            TypeKind.VOID       : lambda: "void",
-            TypeKind.BOOL       : lambda: "bool",
-            TypeKind.CHAR_U     : lambda: "char",
-            TypeKind.UCHAR      : lambda: "unsigned char",
-            TypeKind.USHORT     : lambda: "unsigned short",
-            TypeKind.UINT       : lambda: "unsigned int",
-            TypeKind.ULONG      : lambda: "unsigned long",
-            TypeKind.ULONGLONG  : lambda: "unsigned long long",
-            TypeKind.CHAR_S     : lambda: "char",
-            TypeKind.SCHAR      : lambda: "signed char",
-            TypeKind.SHORT      : lambda: "short",
-            TypeKind.INT        : lambda: "int",
-            TypeKind.LONG       : lambda: "long",
-            TypeKind.LONGLONG   : lambda: "long long",
-            TypeKind.FLOAT      : lambda: "float",
-            TypeKind.DOUBLE     : lambda: "double",
-            TypeKind.LONGDOUBLE : lambda: "long double",
-            TypeKind.ENUM       : lambda: "enum {}".format(t.spelling),
+            TypeKind.VOID            : lambda: "void",
+            TypeKind.BOOL            : lambda: "bool",
+            TypeKind.CHAR_U          : lambda: "char",
+            TypeKind.UCHAR           : lambda: "unsigned char",
+            TypeKind.USHORT          : lambda: "unsigned short",
+            TypeKind.UINT            : lambda: "unsigned int",
+            TypeKind.ULONG           : lambda: "unsigned long",
+            TypeKind.ULONGLONG       : lambda: "unsigned long long",
+            TypeKind.CHAR_S          : lambda: "char",
+            TypeKind.SCHAR           : lambda: "signed char",
+            TypeKind.SHORT           : lambda: "short",
+            TypeKind.INT             : lambda: "int",
+            TypeKind.LONG            : lambda: "long",
+            TypeKind.LONGLONG        : lambda: "long long",
+            TypeKind.FLOAT           : lambda: "float",
+            TypeKind.DOUBLE          : lambda: "double",
+            TypeKind.LONGDOUBLE      : lambda: "long double",
+            TypeKind.ENUM            : lambda: "enum {}".format(t.spelling),
         }
 
         if t.kind == TypeKind.POINTER:
-            # Special case
-            # TODO: function pointers
-            return format_type(t.get_pointee()) + "*" + \
+            pt = t.get_pointee()
+            if pt.kind == TypeKind.FUNCTIONPROTO:
+                return "{}(*{})({})".format(
+                        format_type(pt.get_result(), expand=expand),
+                        n,
+                        ", ".join([format_type(t, expand=expand) for t in pt.argument_types()]))
+            elif pt.kind == TypeKind.UNEXPOSED:
+                return format_type(pt, expand=expand, n=n[1:])
+            return format_type(t.get_pointee(), expand=expand) + "*" + \
                 (" const" if t.is_const_qualified() else "") + \
                 (" volatile" if t.is_volatile_qualified() else "") + \
                 n
-        elif t.kind == TypeKind.CONSTANTARRAY:
-            return format_type(t.element_type) + n + "[{}]".format(t.element_count)
-        elif t.kind == TypeKind.TYPEDEF and resolve_typedefs:
-            return "typedef {};".format(format_type(t.get_canonical(), n=t.get_typedef_name(), in_typedef_resolve=True))
-        elif t.kind in tbl:
-            return fmt + tbl[t.kind]() + n
-        elif t.kind == TypeKind.RECORD or (c is not None and c.kind == CursorKind.FIELD_DECL and c.type.get_declaration().type.kind == TypeKind.RECORD):
+        elif t.kind == TypeKind.TYPEDEF and resolve:
+            return "typedef {};".format(format_type(t.get_canonical(), n=t.get_typedef_name(), expand=True, in_typedef_resolve=True))
+        elif t.kind == TypeKind.RECORD:
             ty = "struct"
-            rt = None
-            if c is not None and c.kind == CursorKind.FIELD_DECL:
-                rt = c.type.get_declaration().type
-                if rt.kind == CursorKind.UNION_DECL:
-                    ty = "union"
-            if rt is not None:
-                t = rt
-                in_typedef_resolve = True
+            if t.get_declaration().kind == CursorKind.UNION_DECL:
+                ty = "union"
+            #if c is not None and c.displayname != "" and in_typedef_resolve:
+            #    return "{}{}{}".format(ty, c.displayname, n)
+            #if not resolve:
+            #    return "{} {}{}".format(ty, c.displayname, n)
+
             return "{}{}{{\n{}}}{}".format(
                     ty,
                     n if not in_typedef_resolve else "",
-                    "".join([format_type(c.type, n=c.displayname, c=c) + ";\n" for c in t.get_fields()]),
+                    "".join([format_type(c.type, expand=expand, n=c.displayname) + ";\n" for c in t.get_fields()]),
                     n if in_typedef_resolve else "")
+        elif t.kind == TypeKind.TYPEDEF:
+            return fmt + t.get_typedef_name() + n
+        elif t.kind == TypeKind.INCOMPLETEARRAY:
+            return format_type(t.element_type, expand=expand, print_struct_name = False) + n + "[]"
+        elif t.kind == TypeKind.CONSTANTARRAY:
+            return format_type(t.element_type, expand=expand, print_struct_name = False) + n + "[{}]".format(t.element_count)
+        elif t.kind == TypeKind.ELABORATED:
+            print("ELABORATED: ", t.spelling)
+            return t.spelling
+        elif t.kind in tbl:
+            return fmt + tbl[t.kind]() + n
+        elif t.kind == TypeKind.UNEXPOSED:
+            s = t.spelling.split(" ")
+            r = s[0] + "(*" + n + ")" + " ".join(s[1:])
+            print("UNEXPOSED", t.spelling, "------- Patched", r)
+            return r
 
-        return t.spelling + n
+        print("Not handled: ", t.kind, ": ", t.spelling)
+        assert(False)
 
     def iter_children(t, tds, sts):
+        if t.kind == TypeKind.ELABORATED:
+            t = t.get_declaration().type
+
         if t.kind == TypeKind.RECORD:
             decl = t.get_declaration()
             if decl.displayname != "" and decl.displayname not in sts:
@@ -157,10 +183,6 @@ def get_decls(tu):
             iter_children(t.get_result(), tds, sts)
             for a in t.argument_types():
                 iter_children(a, tds, sts)
-        else:
-            decl = t.get_declaration()
-            if decl.kind == CursorKind.UNION_DECL or decl.kind == CursorKind.STRUCT_DECL:
-                iter_children(decl.type, tds, sts)
 
     assert(tu.cursor.kind.is_translation_unit())
     structs = {}
@@ -199,21 +221,13 @@ def get_decls(tu):
     # Expand typedefs and add references to structs.
     tds = []
     for _, td in typedefs.items():
-        rt = td.get_canonical()
-        bt = base_type(rt)
-        if rt.kind == TypeKind.POINTER and bt.kind == TypeKind.FUNCTIONPROTO:
-            tds.append("typedef {}(*{})({});".format(
-                format_type(bt.get_result()),
-                td.get_typedef_name(),
-                ", ".join([format_type(t) for t in bt.argument_types()])
-            ))
-        else:
-            tds.append(format_type(td, resolve_typedefs=True))
+        # TODO: if the typedef is something like "typdef struct a b;" then don't expand the struct!
+        tds.append(format_type(td, resolve=True))
 
     strcts = []
     for _, st in structs.items():
         if st.displayname != "":
-            strcts.append(format_type(st.type, n=st.displayname) + ";")
+            strcts.append(format_type(st.type, n=st.displayname, expand=True) + ";")
 
 
     return functions, strcts, tds
