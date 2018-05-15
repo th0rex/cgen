@@ -143,12 +143,12 @@ def get_decls(tu):
         return t.spelling + n
 
     def iter_children(t, tds, sts):
-        if t.kind == TypeKind.RECORD and t.get_declaration() not in sts:
-            sts.append(t.get_declaration())
+        if t.kind == TypeKind.RECORD and t.get_declaration().displayname not in sts:
+            sts[t.get_declaration().displayname] = t.get_declaration()
             for c in t.get_fields():
                 iter_children(c, tds, sts)
-        elif t.kind == TypeKind.TYPEDEF and t not in tds:
-            tds.append(t)
+        elif t.kind == TypeKind.TYPEDEF and t.get_typedef_name() not in tds:
+            tds[t.get_typedef_name()] = t
             iter_children(t.get_canonical(), tds, sts)
         elif t.kind == TypeKind.POINTER:
             iter_children(base_type(t), tds, sts)
@@ -158,9 +158,9 @@ def get_decls(tu):
                 iter_children(a, tds, sts)
 
     assert(tu.cursor.kind.is_translation_unit())
-    structs = []
+    structs = {}
     functions = []
-    typedefs = []
+    typedefs = {}
     for c in tu.cursor.get_children():
         if not (c.kind.is_declaration() and c.kind == CursorKind.FUNCTION_DECL):
             continue
@@ -193,7 +193,7 @@ def get_decls(tu):
 
     # Expand typedefs and add references to structs.
     tds = []
-    for td in typedefs:
+    for _, td in typedefs.items():
         rt = td.get_canonical()
         bt = base_type(rt)
         if rt.kind == TypeKind.POINTER and bt.kind == TypeKind.FUNCTIONPROTO:
@@ -203,11 +203,10 @@ def get_decls(tu):
                 ", ".join([format_type(t) for t in bt.argument_types()])
             ))
         else:
-            #tds.append("typedef {} {};".format(format_type(rt), td.get_typedef_name()))
             tds.append(format_type(td, resolve_typedefs=True))
 
     strcts = []
-    for st in structs:
+    for _, st in structs.items():
         if st.displayname != "":
             strcts.append(format_type(st.type, n=st.displayname) + ";")
 
