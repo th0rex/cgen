@@ -2,6 +2,7 @@
 
 from clang.cindex import *
 
+# Default header files {{{
 std_files = [
     "assert.h", "complex.h", "ctype.h", "errno.h", "fenv.h", "float.h", "inttypes.h", "iso646.h",
     "limits.h", "locale.h", "math.h", "setjmp.h", "signal.h", "stdalign.h", "stdarg.h",
@@ -28,6 +29,7 @@ linux_files = [
     "sys/vfs.h", "sys/vlimit.h", "sys/vm86.h", "sys/vt.h", "sys/vtimes.h", "sys/wait.h",
     "sys/xattr.h",
 ]
+# }}}
 
 def parse_args():
     import sys
@@ -156,7 +158,7 @@ def get_decls(tu):
             return t.spelling + n
         elif c.kind == CursorKind.ENUM_DECL:
             return "enum{}{{\n{}\n}}{}".format(
-                    n if not in_typedef_resolve else "", 
+                    n if not in_typedef_resolve else "",
                     # TODO: cleanup when bn supports negative enum values
                     ",\n".join(["{} = {}".format(x.displayname, x.enum_value if x.enum_value >= 0 else 2**(8*c.enum_type.get_size()) - x.enum_value) for x in c.get_children()]),
                     n if in_typedef_resolve else "")
@@ -199,9 +201,6 @@ def get_decls(tu):
         "errc", "verrc", "errx", "verrx", "__longjmp_chk", "longjmp", "siglongjmp"
     ]
     for i, c in enumerate(tu.cursor.get_children()):
-        # TODO: first add all structs and typedefs and what not as well.
-        # Then filter whether they're used (i.e. insert them with used=False
-        # and use iter_children to set used to True).
         if c.kind == CursorKind.STRUCT_DECL:
             structs.append((i, c))
         elif c.kind == CursorKind.TYPEDEF_DECL:
@@ -219,6 +218,10 @@ def get_decls(tu):
         if c.displayname in already:
             continue
         already.add(c.displayname)
+
+        if c.linkage != LinkageKind.EXTERNAL:
+            #print("Ignoring linkage:", c.linkage)
+            continue
 
         args = []
         cont = False
