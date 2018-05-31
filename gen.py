@@ -33,6 +33,7 @@ linux_files = [
 
 def parse_args():
     import sys
+    is_linux = True
     in_clang_args = False
     clang_args = []
     dirs = []
@@ -40,26 +41,30 @@ def parse_args():
         if arg == "--":
             in_clang_args = True
             continue
+        elif arg == "--windows":
+            is_linux = False
+            continue
 
         if in_clang_args:
             clang_args.append(arg)
         else:
             dirs.append(arg)
 
-    return (dirs, clang_args)
+    return (dirs, clang_args, is_linux)
 
-def create_dummy_file(dirs):
+def create_dummy_file(dirs, is_linux):
     import os
 
     with open("dummy.c", mode="w") as dummy:
         files = [f for d in dirs for f in os.listdir(d) if os.path.isfile(os.path.join(d, f))]
-        files = files + [os.path.join("/usr/include/", f) for f in std_files]
-        files = files + [os.path.join("/usr/include/", f) for f in linux_files]
+        if is_linux:
+            files = files + [os.path.join("/usr/include/", f) for f in std_files]
+            files = files + [os.path.join("/usr/include/", f) for f in linux_files]
 
         for f in files:
             dummy.write("""#include "{}"\n""".format(f))
 
-def get_decls(tu):
+def get_decls(tu, is_linux):
     def base_type(t):
         while t.kind == TypeKind.POINTER:
             t = t.get_pointee()
@@ -128,6 +133,9 @@ def get_decls(tu):
                         ", ".join([format_type(t, expand=expand) for t in pt.argument_types()]))
             elif pt.kind == TypeKind.UNEXPOSED:
                 return format_type(pt, expand=expand, n=n[1:])
+            elif pt.get_declaration().kind == CursorKind.ENUM_DECL:
+                # bn can't do this yet
+                return "void* {}".format(n)
             return format_type(t.get_pointee(), expand=expand) + "*" + \
                 (" const" if t.is_const_qualified() else "") + \
                 (" volatile" if t.is_volatile_qualified() else "") + \
@@ -143,10 +151,15 @@ def get_decls(tu):
             if c.kind == CursorKind.UNION_DECL:
                 ty = "union"
 
+            if len(list(t.get_fields())) == 0:
+                fields = "void* __unused;\n"
+            else:
+                fields = "".join([format_type(c.type, c=c, expand=expand, n=c.displayname, in_typedef_resolve = True) + ";\n" for c in t.get_fields()]),
+
             return "{}{}{{\n{}}}{}".format(
                     ty,
                     n if not in_typedef_resolve else (" " + c.displayname if in_typedef_resolve and c.displayname != "" else ""),
-                    "".join([format_type(c.type, c=c, expand=expand, n=c.displayname, in_typedef_resolve = True) + ";\n" for c in t.get_fields()]),
+                    fields,
                     n if in_typedef_resolve else "")
         elif t.kind == TypeKind.TYPEDEF:
             return fmt + t.get_typedef_name() + n
@@ -174,6 +187,20 @@ def get_decls(tu):
             r = s[0] + "(*" + n + ")" + " ".join(s[1:])
             print("UNEXPOSED", t.spelling, "------- Patched", r)
             return r
+
+        if t.kind == TypeKind.FUNCTIONNOPROTO:
+            # fuck windows
+            # WE HAVE TO HANDLE THIS?!
+            print("------------------- UNHANDLED ", t.spelling)
+            if "BSTR" in t.spelling:
+                "void*" # TODO: please help me
+            elif "VARIANT_BOOL" in t.spelling:
+                return "short"
+            elif "int" in t.spelling:
+                return "int"
+            #elif "struct _HTTP_VERSION" in t.spelling:
+            #    # WHAT THE FUCK DO I DO
+            return ""
 
         print("Not handled: ", t.kind, ": ", t.spelling)
         assert(False)
@@ -211,6 +238,12 @@ def get_decls(tu):
         if not (c.kind.is_declaration() and c.kind == CursorKind.FUNCTION_DECL):
             continue
         ft = c.type
+        if ft.kind == TypeKind.FUNCTIONNOPROTO:
+            # TODO: what the fuck is this and why does windows have it
+            continue
+        if ft.kind != TypeKind.FUNCTIONPROTO:
+            print(ft.kind)
+            continue
         assert(ft.kind == TypeKind.FUNCTIONPROTO)
         if blocked(ft.get_result()):
             continue
@@ -242,9 +275,15 @@ def get_decls(tu):
 
         ret_type = format_type(ft.get_result())
 
-        functions.append(
-            (i, "{} {}({}){};".format(ret_type, c.mangled_name, ",".join(args), " __noreturn" if c.mangled_name in no_return else ""))
-        )
+        if is_linux:
+            functions.append(
+                (i, "{} {}({}){};".format(ret_type, c.mangled_name, ",".join(args), " __noreturn" if c.mangled_name in no_return else ""))
+            )
+        else:
+            # Assume stdcall lul
+            functions.append(
+                (i, "{} __stdcall {}({}){};".format(ret_type, c.mangled_name, ",".join(args), " __noreturn" if c.mangled_name in no_return else ""))
+            )
 
     # Expand typedefs and add references to structs.
     tds = []
@@ -286,7 +325,7 @@ def get_decls(tu):
         # Can be removed once bn supports empty structs/unions:
         if len(list(st.type.get_fields())) == 0:
             already.add(st.displayname)
-            strcts.append((i, "struct {} {{ void* __unused; }};".format(st.displayname)))
+            strcts.append((i, "{} {} {{ void* __unused; }};".format("struct" if st.kind == CursorKind.STRUCT_DECL else "union", st.displayname)))
             continue
         already.add(st.displayname)
         strcts.append((i, format_type(st.type, n=st.displayname, expand=True) + ";"))
@@ -301,19 +340,26 @@ def get_decls(tu):
     return functions, strcts, tds, enms
 
 def main():
-    dirs, clang_args = parse_args()
-    create_dummy_file(dirs)
+    dirs, clang_args, is_linux = parse_args()
+    create_dummy_file(dirs, is_linux)
 
     index = Index.create()
     tu = index.parse("dummy.c", args=clang_args)
 
-    with open("posix.c", "w") as output:
-        fns, structs, typedefs, enums = get_decls(tu)
-        # TODO: build tree and return it so that we can print them in proper order
-        xs = sorted(fns + structs + typedefs + enums, key=lambda i: i[0])
-        output.write("struct __locale_data { void* __unused; };\n")
-        for _, x in xs:
-            output.write(x + "\n")
+    if is_linux:
+        output = open("posix.c", "w")
+    else:
+        output = open("windows.c", "w")
+
+    if not is_linux:
+        output.write("typedef uint32_t DWORD;\ntypedef DWORD ACCESS_MASK;\n")
+
+    fns, structs, typedefs, enums = get_decls(tu, is_linux)
+    # TODO: build tree and return it so that we can print them in proper order
+    xs = sorted(fns + structs + typedefs + enums, key=lambda i: i[0])
+    output.write("struct __locale_data { void* __unused; };\n")
+    for _, x in xs:
+        output.write(x + "\n")
 
 if __name__ == "__main__":
     main()
