@@ -61,8 +61,11 @@ def create_dummy_file(dirs, is_linux):
             files = files + [os.path.join("/usr/include/", f) for f in std_files]
             files = files + [os.path.join("/usr/include/", f) for f in linux_files]
 
-        for f in files:
-            dummy.write("""#include "{}"\n""".format(f))
+        if not is_linux:
+            dummy.write("""#include "windows.h"\n""")
+        else:
+            for f in files:
+                dummy.write("""#include "{}"\n""".format(f))
 
 def get_decls(tu, is_linux):
     def base_type(t):
@@ -104,6 +107,9 @@ def get_decls(tu, is_linux):
         if t.kind == TypeKind.INT and n is not None and n == " size_t":
             return fmt + "size_t"
 
+        if t.kind == TypeKind.VOID and in_typedef_resolve:
+            return "void* " + n
+
         tbl = {
             TypeKind.VOID            : "void",
             TypeKind.BOOL            : "bool",
@@ -126,7 +132,9 @@ def get_decls(tu, is_linux):
 
         if t.kind == TypeKind.POINTER:
             pt = t.get_pointee()
-            if pt.kind == TypeKind.FUNCTIONPROTO:
+            if in_typedef_resolve and (pt.get_declaration().kind == CursorKind.STRUCT_DECL or pt.get_declaration().kind == CursorKind.UNION_DECL):
+                return "void* {}".format(n)
+            if pt.kind == TypeKind.FUNCTIONPROTO or pt.kind == TypeKind.FUNCTIONNOPROTO:
                 return "{}(*{})({})".format(
                         format_type(pt.get_result(), expand=expand),
                         n,
@@ -136,7 +144,7 @@ def get_decls(tu, is_linux):
             elif pt.get_declaration().kind == CursorKind.ENUM_DECL:
                 # bn can't do this yet
                 return "void* {}".format(n)
-            return format_type(t.get_pointee(), expand=expand) + "*" + \
+            return format_type(t.get_pointee(), expand=expand, in_typedef_resolve=in_typedef_resolve) + "*" + \
                 (" const" if t.is_const_qualified() else "") + \
                 (" volatile" if t.is_volatile_qualified() else "") + \
                 n
@@ -144,6 +152,7 @@ def get_decls(tu, is_linux):
             if t.get_canonical().kind == TypeKind.FUNCTIONPROTO:
                 # Fuck gnu libc for using this feature
                 return ""
+            cano = t.get_canonical()
             #print(t.get_declaration().get_definition().type.kind, t.get_declaration().underlying_typedef_type.displayname)
             return "typedef {};".format(format_type(t.get_declaration().underlying_typedef_type, n=t.get_typedef_name(), expand=True, in_typedef_resolve=True))
         elif t.kind == TypeKind.RECORD:
@@ -151,15 +160,18 @@ def get_decls(tu, is_linux):
             if c.kind == CursorKind.UNION_DECL:
                 ty = "union"
 
-            if len(list(t.get_fields())) == 0:
-                fields = "void* __unused;\n"
+            fields = list(t.get_fields())
+
+            if len(fields) == 0:
+                fields_str = "void* __unused;\n"
             else:
-                fields = "".join([format_type(c.type, c=c, expand=expand, n=c.displayname, in_typedef_resolve = True) + ";\n" for c in t.get_fields()]),
+                fields_str = "".join([format_type(c.type, c=c, expand=expand, n=c.displayname, in_typedef_resolve = True) + ";\n" for c in fields])
 
             return "{}{}{{\n{}}}{}".format(
                     ty,
+                    # TODO: fix this line so we can remove the extra struct handling in typedefs
                     n if not in_typedef_resolve else (" " + c.displayname if in_typedef_resolve and c.displayname != "" else ""),
-                    fields,
+                    fields_str,
                     n if in_typedef_resolve else "")
         elif t.kind == TypeKind.TYPEDEF:
             return fmt + t.get_typedef_name() + n
@@ -238,13 +250,10 @@ def get_decls(tu, is_linux):
         if not (c.kind.is_declaration() and c.kind == CursorKind.FUNCTION_DECL):
             continue
         ft = c.type
-        if ft.kind == TypeKind.FUNCTIONNOPROTO:
-            # TODO: what the fuck is this and why does windows have it
+        if ft.kind != TypeKind.FUNCTIONPROTO and ft.kind != TypeKind.FUNCTIONNOPROTO:
+            print("no function proto ", c.kind, "---", ft.kind, "---", c.displayname, "---", c.spelling, "---", ft.spelling)
             continue
-        if ft.kind != TypeKind.FUNCTIONPROTO:
-            print(ft.kind)
-            continue
-        assert(ft.kind == TypeKind.FUNCTIONPROTO)
+        assert(ft.kind == TypeKind.FUNCTIONPROTO or ft.kind == TypeKind.FUNCTIONNOPROTO)
         if blocked(ft.get_result()):
             continue
 
@@ -267,7 +276,7 @@ def get_decls(tu, is_linux):
 
             args.append(format_type(a, n=p.mangled_name))
 
-        if ft.is_function_variadic():
+        if ft.kind == TypeKind.FUNCTIONPROTO and ft.is_function_variadic():
             args.append("...")
 
         if cont:
@@ -290,6 +299,9 @@ def get_decls(tu, is_linux):
     block = [
         "int8_t", "uint8_t", "int16_t", "uint16_t", "int32_t", "uint32_t", "size_t", "uintptr_t", "offset_t",
         "int64_t", "uint64_t", "ssize_t",
+
+        # Windows shit
+        "LPOLESTREAMVTBL",
     ]
     replace = {
         "locale_t": "typedef struct __locale_struct* locale_t;",
@@ -313,6 +325,7 @@ def get_decls(tu, is_linux):
         if tdn in already:
             continue
         already.add(tdn)
+
         tds.append((i, format_type(td.type, resolve=True)))
 
     strcts = []
@@ -352,13 +365,64 @@ def main():
         output = open("windows.c", "w")
 
     if not is_linux:
-        output.write("typedef uint32_t DWORD;\ntypedef DWORD ACCESS_MASK;\n")
+        replaces = ["ACCESS_MASK", "SECURITY_INFORMATION", "EXECUTION_STATE", "COLORREF", "TP_WAIT_RESULT", "LGRPID", "CALID", "LCTYPE", 
+                "CALTYPE", "NLS_FUNCTION", "GEOTYPE", "GEOCLASS", "REGSAM", "FOURCC", "MCIERROR", "MIDL_STUB_DESC"]
+                # Windows interface shit {{{
+        declares = [
+                "IUnknownVtbl", "AsyncIUnknownVtbl", "IClassFactoryVtbl", "IMarshalVtbl", "INoMarshalVtbl",
+"IAgileObjectVtbl", "IMarshal2Vtbl", "IMallocVtbl", "IStdMarshalInfoVtbl", "IExternalConnectionVtbl", "IMultiQIVtbl", "AsyncIMultiQIVtbl",
+"IInternalUnknownVtbl", "IEnumUnknownVtbl", "IEnumStringVtbl", "ISequentialStreamVtbl", "IStreamVtbl", "IAsyncRpcChannelBufferVtbl",
+"IRpcSyntaxNegotiateVtbl", "IRpcProxyBufferVtbl", "IPSFactoryBufferVtbl", "IChannelHookVtbl", "IClientSecurityVtbl", "IServerSecurityVtbl",
+"IRpcOptionsVtbl", "IGlobalOptionsVtbl", "ISurrogateVtbl", "IGlobalInterfaceTableVtbl", "ISynchronizeVtbl", "ISynchronizeHandleVtbl",
+"ISynchronizeEventVtbl", "ISynchronizeContainerVtbl", "ISynchronizeMutexVtbl", "ICancelMethodCallsVtbl", "IAsyncManagerVtbl", "ICallFactoryVtbl",
+"IRpcHelperVtbl", "IReleaseMarshalBuffersVtbl", "IWaitMultipleVtbl", "IAddrTrackingControlVtbl", "IAddrExclusionControlVtbl", "IPipeByteVtbl",
+"IPipeLongVtbl", "IPipeDoubleVtbl", "IComThreadingInfoVtbl", "IProcessInitControlVtbl", "IFastRundownVtbl", "IMarshalingStreamVtbl",
+"IMallocSpyVtbl", "IBindCtxVtbl", "IEnumMonikerVtbl", "IRunnableObjectVtbl", "IRunningObjectTableVtbl", "IPersistVtbl", "IPersistStreamVtbl",
+"IMonikerVtbl", "IROTDataVtbl", "IEnumSTATSTGVtbl", "IStorageVtbl", "IPersistFileVtbl", "IPersistStorageVtbl", "ILockBytesVtbl", "IEnumFORMATETCVtbl",
+"IEnumSTATDATAVtbl", "IRootStorageVtbl", "IAdviseSinkVtbl", "AsyncIAdviseSinkVtbl", "IAdviseSink2Vtbl", "AsyncIAdviseSink2Vtbl", "IDataObjectVtbl",
+"IDataAdviseHolderVtbl", "IMessageFilterVtbl", "IClassActivatorVtbl", "IFillLockBytesVtbl", "IProgressNotifyVtbl", "ILayoutStorageVtbl",
+"IBlockingLockVtbl", "ITimeAndNoticeControlVtbl", "IOplockStorageVtbl", "IDirectWriterLockVtbl", "IUrlMonVtbl", "IForegroundTransferVtbl",
+"IThumbnailExtractorVtbl", "IDummyHICONIncluderVtbl", "IProcessLockVtbl", "ISurrogateServiceVtbl", "IInitializeSpyVtbl", "IApartmentShutdownVtbl",
+"IPersistMonikerVtbl", "IMonikerPropVtbl", "IBindProtocolVtbl", "IBindingVtbl", "IBindStatusCallbackVtbl", "IBindStatusCallbackExVtbl",
+"IAuthenticateVtbl", "IAuthenticateExVtbl", "IHttpNegotiateVtbl", "IHttpNegotiate2Vtbl", "IHttpNegotiate3Vtbl", "IWinInetFileStreamVtbl",
+"IWindowForBindingUIVtbl", "ICodeInstallVtbl", "IWinInetInfoVtbl", "IHttpSecurityVtbl", "IWinInetHttpInfoVtbl", "IWinInetHttpTimeoutsVtbl",
+"IBindHostVtbl", "IInternetVtbl", "IInternetBindInfoVtbl", "IInternetBindInfoExVtbl", "IInternetProtocolRootVtbl", "IInternetProtocolVtbl",
+"IInternetProtocolSinkVtbl", "IInternetProtocolSinkStackableVtbl", "IInternetSessionVtbl", "IInternetThreadSwitchVtbl", "IInternetPriorityVtbl",
+"IInternetProtocolInfoVtbl", "IInternetSecurityMgrSiteVtbl", "IInternetSecurityManagerVtbl", "IInternetHostSecurityManagerVtbl",
+"IInternetZoneManagerVtbl", "ISoftDistExtVtbl", "ICatalogFileInfoVtbl", "IDataFilterVtbl", "IEncodingFilterFactoryVtbl", "IWrappedProtocolVtbl", "IGetBindHandleVtbl",
+"IBindCallbackRedirectVtbl", "IOleAdviseHolderVtbl", "IOleCacheVtbl", "IOleCache2Vtbl", "IOleCacheControlVtbl", "IParseDisplayNameVtbl", "IOleContainerVtbl", "IOleClientSiteVtbl", "IOleObjectVtbl", "IOleWindowVtbl", "IOleLinkVtbl", "IOleItemContainerVtbl", "IOleInPlaceUIWindowVtbl", "IOleInPlaceActiveObjectVtbl", "IOleInPlaceFrameVtbl", "IOleInPlaceObjectVtbl",
+"IOleInPlaceSiteVtbl", "IContinueVtbl", "IViewObjectVtbl", "IViewObject2Vtbl",
+"IDropSourceVtbl", "IDropTargetVtbl", "IDropSourceNotifyVtbl", "IEnumOLEVERBVtbl",
+"IServiceProviderVtbl", "ICreateTypeInfoVtbl", "ICreateTypeInfo2Vtbl", "ICreateTypeLibVtbl",
+"ICreateTypeLib2Vtbl", "IDispatchVtbl", "IEnumVARIANTVtbl", "ITypeCompVtbl",
+"ITypeInfoVtbl", "ITypeInfo2Vtbl", "ITypeLibVtbl", "ITypeLib2Vtbl",
+"ITypeChangeEventsVtbl", "IErrorInfoVtbl", "ICreateErrorInfoVtbl", "ISupportErrorInfoVtbl",
+"ITypeFactoryVtbl", "ITypeMarshalVtbl", "IRecordInfoVtbl", "IErrorLogVtbl",
+"IPropertyBagVtbl", "HREFTYPE", "IPropertyStorageVtbl", "IPropertySetStorageVtbl",
+"IEnumSTATPROPSTGVtbl", "IEnumSTATPROPSETSTGVtbl", "PROPID", "LPOLESTREAMVTBL",
+                # }}}
+                ]
+        # TODO: why do typedefs for non dword pointers work but not for dword?
+        output.write("typedef uint32_t DWORD;\ntypedef unsigned long ULONG;\n" + "".join(["typedef DWORD {};\n".format(x) for x in replaces]))
+        output.write("".join(["struct {};\n".format(x) for x in declares]))
 
     fns, structs, typedefs, enums = get_decls(tu, is_linux)
     # TODO: build tree and return it so that we can print them in proper order
     xs = sorted(fns + structs + typedefs + enums, key=lambda i: i[0])
     output.write("struct __locale_data { void* __unused; };\n")
+    # Functionpointer with pointers as return/parameter stuff, TODO we can't do this yet
+    blck = ["GENERIC_BINDING", "pfnAllocate", "PFN_CMSG_ALLOC", "IRpcChannel", "IRpcStub",
+            "I_RpcServerInqAddressChangeFn", "_MIDL_STUB_DESC", "_MALLOC_FREE_STRUCT",
+            "RpcSsSwapClientAllocFree", "USER_MARSHAL", "RpcSmSwapClientAllocFree"]
     for _, x in xs:
+        if not is_linux:
+            done = False
+            for a in blck:
+                if a in x:
+                    done = True
+                    break
+            if done:
+                continue
         output.write(x + "\n")
 
 if __name__ == "__main__":
