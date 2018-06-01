@@ -293,7 +293,11 @@ def get_decls(tu, is_linux):
                 cont = True
                 break
 
-            args.append(format_type(a, n=p.mangled_name))
+            name = p.mangled_name
+            if len(name) > 0 and name[0] == "_" and not is_linux:
+                name = name[1:]
+
+            args.append(format_type(a, n=name))
 
         if ft.kind == TypeKind.FUNCTIONPROTO and ft.is_function_variadic():
             args.append("...")
@@ -306,7 +310,7 @@ def get_decls(tu, is_linux):
         name = c.mangled_name
         if "@" in name:
             name = c.mangled_name[:name.find("@")]
-        if name[0] == "_":
+        if name[0] == "_" and not is_linux:
             name = name[1:]
 
         if is_linux:
