@@ -227,10 +227,6 @@ def get_decls(tu, is_linux):
 
         if t.kind == TypeKind.RECORD:
             decl = t.get_declaration()
-            if decl.displayname == "_FLOATING_SAVE_AREA":
-                print("_FLOATING_SAVE_AREA", i-1)
-            elif decl.displayname == "_CONTEXT":
-                print("_CONTEXT", i-1)
             sts.append((i-1, decl))
         elif t.kind == TypeKind.TYPEDEF:
             iter_children(i, t.get_canonical(), sts)
@@ -252,16 +248,11 @@ def get_decls(tu, is_linux):
         if c.kind == CursorKind.STRUCT_DECL:
             if c.canonical == c:
                 # Forward decl:
-                print("FORWARD DECL")
                 forwards.append((i, c))
             else:
                 structs.append((i, c))
         elif c.kind == CursorKind.TYPEDEF_DECL:
             iter_children(i, c.type, structs)
-            if c.type.get_typedef_name() == "FLOATING_SAVE_AREA":
-                print("FLOATING SAVE", i)
-            elif c.type.get_typedef_name() == "CONTEXT":
-                print("CONTEXT", i)
             typedefs.append((i, c))
         elif c.kind == CursorKind.ENUM_DECL:
             enums.append((i, c))
@@ -437,6 +428,9 @@ def main():
                 ]
         # TODO: why do typedefs for non dword pointers work but not for dword?
         output.write("""
+        // This appears nowhere in the headers as a forward decl.
+        // It appears as a member in a struct but that doesn't globally forward declare it, right?
+        struct _ACTIVATION_CONTEXT;
         """)
         #output.write("typedef uint32_t DWORD;\n" + "".join(["typedef DWORD {};\n".format(x) for x in replaces]))
         output.write("".join(["struct {};\n".format(x) for x in declares]))
@@ -445,16 +439,11 @@ def main():
     # TODO: build tree and return it so that we can print them in proper order
     xs = sorted(fns + typedefs + structs + enums + fwds, key=lambda i: i[0])
 
-    lul =["_CONTEXT", "_FLOATING_SAVE_AREA", "FLOATING_SAVE_AREA", "CONTEXT"]
-
-    for i, x in xs:
-        for l in lul:
-            if l in x:
-                print("i= ", i, " --- ", l, " IS IN ", x)
-
     output.write("struct __locale_data { void* __unused; };\n")
     blck = ["IRpcChannel", "IRpcStub", "I_RpcServerInqAddressChangeFn", "_MIDL_STUB_DESC", "RpcSmSwapClientAllocFree", "RpcSsSwapClientAllocFree",
             "IViewObject",
+            # Appears twice for some reason
+            "_VerSetConditionMask",
             # We don't handle multi dimensional arrays correctly.
             "tagINPUT_TRANSFORM", "_CRYPT_AES_128_KEY_STATE", "_CRYPT_AES_256_KEY_STATE"]
     for _, x in xs:
