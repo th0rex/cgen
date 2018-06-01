@@ -64,6 +64,7 @@ def create_dummy_file(dirs, is_linux):
         if not is_linux:
             dummy.write("""#include "basetsd.h"\n""")
             dummy.write("""#include "minwindef.h"\n""")
+            dummy.write("""#include "winsock2.h"\n""")
             dummy.write("""#include "windows.h"\n""")
             dummy.write("""#include "winuser.h"\n""")
         else:
@@ -305,6 +306,8 @@ def get_decls(tu, is_linux):
         name = c.mangled_name
         if "@" in name:
             name = c.mangled_name[:name.find("@")]
+        if name[0] == "_":
+            name = name[1:]
 
         if is_linux:
             functions.append(
@@ -414,7 +417,7 @@ def main():
     blck = ["IRpcChannel", "IRpcStub", "I_RpcServerInqAddressChangeFn", "_MIDL_STUB_DESC", "RpcSmSwapClientAllocFree", "RpcSsSwapClientAllocFree",
             "IViewObject",
             # Appears twice for some reason
-            "_VerSetConditionMask",
+            "VerSetConditionMask",
             # We don't handle multi dimensional arrays correctly.
             "tagINPUT_TRANSFORM", "_CRYPT_AES_128_KEY_STATE", "_CRYPT_AES_256_KEY_STATE"]
     for _, x in xs:
