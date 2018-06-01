@@ -62,7 +62,10 @@ def create_dummy_file(dirs, is_linux):
             files = files + [os.path.join("/usr/include/", f) for f in linux_files]
 
         if not is_linux:
+            dummy.write("""#include "basetsd.h"\n""")
+            dummy.write("""#include "minwindef.h"\n""")
             dummy.write("""#include "windows.h"\n""")
+            dummy.write("""#include "winuser.h"\n""")
         else:
             for f in files:
                 dummy.write("""#include "{}"\n""".format(f))
@@ -195,8 +198,9 @@ def get_decls(tu, is_linux):
             #    return fmt + tbl[t.kind] + "{}:{}".format(n, c.get_bitfield_width())
             return fmt + tbl[t.kind] + n
         elif t.kind == TypeKind.UNEXPOSED:
-            s = t.spelling.split(" ")
-            r = s[0] + "(*" + n + ")" + " ".join(s[1:])
+            s = t.spelling
+            idx = s.find("(")
+            r = s[:idx] + "(*" + n + ")" + s[idx:]
             print("UNEXPOSED", t.spelling, "------- Patched", r)
             return r
 
@@ -284,25 +288,33 @@ def get_decls(tu, is_linux):
 
         ret_type = format_type(ft.get_result())
 
+        name = c.mangled_name
+        if "@" in name:
+            name = c.mangled_name[:name.find("@")]
+
         if is_linux:
             functions.append(
-                (i, "{} {}({}){};".format(ret_type, c.mangled_name, ",".join(args), " __noreturn" if c.mangled_name in no_return else ""))
+                (i, "{} {}({}){};".format(ret_type, name, ",".join(args), " __noreturn" if name in no_return else ""))
             )
         else:
             # Assume stdcall lul
             functions.append(
-                (i, "{} __stdcall {}({}){};".format(ret_type, c.mangled_name, ",".join(args), " __noreturn" if c.mangled_name in no_return else ""))
+                (i, "{} __stdcall {}({}){};".format(ret_type, name, ",".join(args), " __noreturn" if name in no_return else ""))
             )
 
     # Expand typedefs and add references to structs.
     tds = []
     block = [
-        "int8_t", "uint8_t", "int16_t", "uint16_t", "int32_t", "uint32_t", "size_t", "uintptr_t", "offset_t",
+        "int8_t", "uint8_t", "int16_t", "uint16_t", "int32_t", "uint32_t", "size_t", "offset_t",
         "int64_t", "uint64_t", "ssize_t",
 
         # Windows shit
         "LPOLESTREAMVTBL",
     ]
+    if is_linux:
+        block.append("uintptr_t")
+    else:
+        block.append("ptrdiff_t")
     replace = {
         "locale_t": "typedef struct __locale_struct* locale_t;",
         "sigval_t": "typedef __sigval_t sigval_t;",
@@ -365,8 +377,8 @@ def main():
         output = open("windows.c", "w")
 
     if not is_linux:
-        replaces = ["ACCESS_MASK", "SECURITY_INFORMATION", "EXECUTION_STATE", "COLORREF", "TP_WAIT_RESULT", "LGRPID", "CALID", "LCTYPE", 
-                "CALTYPE", "NLS_FUNCTION", "GEOTYPE", "GEOCLASS", "REGSAM", "FOURCC", "MCIERROR", "MIDL_STUB_DESC"]
+        replaces = ["ACCESS_MASK", "SECURITY_INFORMATION", "EXECUTION_STATE", "COLORREF", "TP_WAIT_RESULT", "LGRPID", "CALID", "LCTYPE",
+                "CALTYPE", "NLS_FUNCTION", "GEOTYPE", "GEOCLASS", "REGSAM", "FOURCC", "MCIERROR", "MIDL_STUB_DESC", "__builtin_va_list"]
                 # Windows interface shit {{{
         declares = [
                 "IUnknownVtbl", "AsyncIUnknownVtbl", "IClassFactoryVtbl", "IMarshalVtbl", "INoMarshalVtbl",
@@ -403,17 +415,18 @@ def main():
                 # }}}
                 ]
         # TODO: why do typedefs for non dword pointers work but not for dword?
-        output.write("typedef uint32_t DWORD;\ntypedef unsigned long ULONG;\n" + "".join(["typedef DWORD {};\n".format(x) for x in replaces]))
+        output.write("")
+        #output.write("typedef uint32_t DWORD;\n" + "".join(["typedef DWORD {};\n".format(x) for x in replaces]))
         output.write("".join(["struct {};\n".format(x) for x in declares]))
 
     fns, structs, typedefs, enums = get_decls(tu, is_linux)
     # TODO: build tree and return it so that we can print them in proper order
-    xs = sorted(fns + structs + typedefs + enums, key=lambda i: i[0])
+    xs = sorted(fns + typedefs +  structs + enums, key=lambda i: i[0])
     output.write("struct __locale_data { void* __unused; };\n")
-    # Functionpointer with pointers as return/parameter stuff, TODO we can't do this yet
-    blck = ["GENERIC_BINDING", "pfnAllocate", "PFN_CMSG_ALLOC", "IRpcChannel", "IRpcStub",
-            "I_RpcServerInqAddressChangeFn", "_MIDL_STUB_DESC", "_MALLOC_FREE_STRUCT",
-            "RpcSsSwapClientAllocFree", "USER_MARSHAL", "RpcSmSwapClientAllocFree"]
+    blck = ["IRpcChannel", "IRpcStub", "I_RpcServerInqAddressChangeFn", "_MIDL_STUB_DESC", "RpcSmSwapClientAllocFree", "RpcSsSwapClientAllocFree",
+            "IViewObject",
+            # We don't handle multi dimensional arrays correctly.
+            "tagINPUT_TRANSFORM", "_CRYPT_AES_128_KEY_STATE", "_CRYPT_AES_256_KEY_STATE"]
     for _, x in xs:
         if not is_linux:
             done = False
@@ -424,6 +437,8 @@ def main():
             if done:
                 continue
         output.write(x + "\n")
+
+    print("\n".join(map(repr, tu.diagnostics)))
 
 if __name__ == "__main__":
     main()
