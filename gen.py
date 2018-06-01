@@ -227,11 +227,16 @@ def get_decls(tu, is_linux):
 
         if t.kind == TypeKind.RECORD:
             decl = t.get_declaration()
+            if decl.displayname == "_FLOATING_SAVE_AREA":
+                print("_FLOATING_SAVE_AREA", i-1)
+            elif decl.displayname == "_CONTEXT":
+                print("_CONTEXT", i-1)
             sts.append((i-1, decl))
         elif t.kind == TypeKind.TYPEDEF:
             iter_children(i, t.get_canonical(), sts)
 
     assert(tu.cursor.kind.is_translation_unit())
+    forwards = []
     structs = []
     functions = []
     typedefs = []
@@ -245,10 +250,19 @@ def get_decls(tu, is_linux):
     ]
     for i, c in enumerate(tu.cursor.get_children()):
         if c.kind == CursorKind.STRUCT_DECL:
-            structs.append((i, c))
+            if c.canonical == c:
+                # Forward decl:
+                print("FORWARD DECL")
+                forwards.append((i, c))
+            else:
+                structs.append((i, c))
         elif c.kind == CursorKind.TYPEDEF_DECL:
-            typedefs.append((i, c))
             iter_children(i, c.type, structs)
+            if c.type.get_typedef_name() == "FLOATING_SAVE_AREA":
+                print("FLOATING SAVE", i)
+            elif c.type.get_typedef_name() == "CONTEXT":
+                print("CONTEXT", i)
+            typedefs.append((i, c))
         elif c.kind == CursorKind.ENUM_DECL:
             enums.append((i, c))
         if not (c.kind.is_declaration() and c.kind == CursorKind.FUNCTION_DECL):
@@ -362,7 +376,14 @@ def get_decls(tu, is_linux):
             continue
         enms.append((i, format_type(en.type, n=en.displayname, expand=True) + ";"))
 
-    return functions, strcts, tds, enms
+    already = set()
+    fwds = []
+    for i, fw in forwards:
+        if fw.displayname == "":
+            continue
+        fwds.append((i, "struct {};".format(fw.displayname)))
+
+    return functions, strcts, tds, enms, fwds
 
 def main():
     dirs, clang_args, is_linux = parse_args()
@@ -415,13 +436,22 @@ def main():
                 # }}}
                 ]
         # TODO: why do typedefs for non dword pointers work but not for dword?
-        output.write("")
+        output.write("""
+        """)
         #output.write("typedef uint32_t DWORD;\n" + "".join(["typedef DWORD {};\n".format(x) for x in replaces]))
         output.write("".join(["struct {};\n".format(x) for x in declares]))
 
-    fns, structs, typedefs, enums = get_decls(tu, is_linux)
+    fns, structs, typedefs, enums, fwds = get_decls(tu, is_linux)
     # TODO: build tree and return it so that we can print them in proper order
-    xs = sorted(fns + typedefs +  structs + enums, key=lambda i: i[0])
+    xs = sorted(fns + typedefs + structs + enums + fwds, key=lambda i: i[0])
+
+    lul =["_CONTEXT", "_FLOATING_SAVE_AREA", "FLOATING_SAVE_AREA", "CONTEXT"]
+
+    for i, x in xs:
+        for l in lul:
+            if l in x:
+                print("i= ", i, " --- ", l, " IS IN ", x)
+
     output.write("struct __locale_data { void* __unused; };\n")
     blck = ["IRpcChannel", "IRpcStub", "I_RpcServerInqAddressChangeFn", "_MIDL_STUB_DESC", "RpcSmSwapClientAllocFree", "RpcSsSwapClientAllocFree",
             "IViewObject",
