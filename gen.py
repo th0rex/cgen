@@ -135,8 +135,17 @@ def get_decls(tu, is_linux):
 
         if t.kind == TypeKind.POINTER:
             pt = t.get_pointee()
-            if in_typedef_resolve and (pt.get_declaration().kind == CursorKind.STRUCT_DECL or pt.get_declaration().kind == CursorKind.UNION_DECL):
-                return "void* {}".format(n)
+            c = pt.get_declaration()
+            if in_typedef_resolve and (c.kind == CursorKind.STRUCT_DECL or c.kind == CursorKind.UNION_DECL):
+                ty = "struct"
+                if c.kind == CursorKind.UNION_DECL:
+                    ty = "union"
+                # Not a real declaration
+                if c.canonical == c and c.displayname != "":
+                    return "{} {}* {}".format(ty, c.displayname, n)
+                # Not that much we can do since bn doesn't support typedef struct A{int b;}* C;
+                else:
+                    return "void* {}".format(n)
             if pt.kind == TypeKind.FUNCTIONPROTO or pt.kind == TypeKind.FUNCTIONNOPROTO:
                 return "{}(*{})({})".format(
                         format_type(pt.get_result(), expand=expand),
@@ -144,7 +153,7 @@ def get_decls(tu, is_linux):
                         ", ".join([format_type(t, expand=expand) for t in pt.argument_types()]))
             elif pt.kind == TypeKind.UNEXPOSED:
                 return format_type(pt, expand=expand, n=n[1:])
-            elif pt.get_declaration().kind == CursorKind.ENUM_DECL:
+            elif c.kind == CursorKind.ENUM_DECL:
                 # bn can't do this yet
                 return "void* {}".format(n)
             return format_type(t.get_pointee(), expand=expand, in_typedef_resolve=in_typedef_resolve) + "*" + \
@@ -431,6 +440,8 @@ def main():
         // This appears nowhere in the headers as a forward decl.
         // It appears as a member in a struct but that doesn't globally forward declare it, right?
         struct _ACTIVATION_CONTEXT;
+        // Same
+        struct lconv;
         """)
         #output.write("typedef uint32_t DWORD;\n" + "".join(["typedef DWORD {};\n".format(x) for x in replaces]))
         output.write("".join(["struct {};\n".format(x) for x in declares]))
