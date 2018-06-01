@@ -398,44 +398,6 @@ def main():
         output = open("windows.c", "w")
 
     if not is_linux:
-        replaces = ["ACCESS_MASK", "SECURITY_INFORMATION", "EXECUTION_STATE", "COLORREF", "TP_WAIT_RESULT", "LGRPID", "CALID", "LCTYPE",
-                "CALTYPE", "NLS_FUNCTION", "GEOTYPE", "GEOCLASS", "REGSAM", "FOURCC", "MCIERROR", "MIDL_STUB_DESC", "__builtin_va_list"]
-                # Windows interface shit {{{
-        declares = [
-                "IUnknownVtbl", "AsyncIUnknownVtbl", "IClassFactoryVtbl", "IMarshalVtbl", "INoMarshalVtbl",
-"IAgileObjectVtbl", "IMarshal2Vtbl", "IMallocVtbl", "IStdMarshalInfoVtbl", "IExternalConnectionVtbl", "IMultiQIVtbl", "AsyncIMultiQIVtbl",
-"IInternalUnknownVtbl", "IEnumUnknownVtbl", "IEnumStringVtbl", "ISequentialStreamVtbl", "IStreamVtbl", "IAsyncRpcChannelBufferVtbl",
-"IRpcSyntaxNegotiateVtbl", "IRpcProxyBufferVtbl", "IPSFactoryBufferVtbl", "IChannelHookVtbl", "IClientSecurityVtbl", "IServerSecurityVtbl",
-"IRpcOptionsVtbl", "IGlobalOptionsVtbl", "ISurrogateVtbl", "IGlobalInterfaceTableVtbl", "ISynchronizeVtbl", "ISynchronizeHandleVtbl",
-"ISynchronizeEventVtbl", "ISynchronizeContainerVtbl", "ISynchronizeMutexVtbl", "ICancelMethodCallsVtbl", "IAsyncManagerVtbl", "ICallFactoryVtbl",
-"IRpcHelperVtbl", "IReleaseMarshalBuffersVtbl", "IWaitMultipleVtbl", "IAddrTrackingControlVtbl", "IAddrExclusionControlVtbl", "IPipeByteVtbl",
-"IPipeLongVtbl", "IPipeDoubleVtbl", "IComThreadingInfoVtbl", "IProcessInitControlVtbl", "IFastRundownVtbl", "IMarshalingStreamVtbl",
-"IMallocSpyVtbl", "IBindCtxVtbl", "IEnumMonikerVtbl", "IRunnableObjectVtbl", "IRunningObjectTableVtbl", "IPersistVtbl", "IPersistStreamVtbl",
-"IMonikerVtbl", "IROTDataVtbl", "IEnumSTATSTGVtbl", "IStorageVtbl", "IPersistFileVtbl", "IPersistStorageVtbl", "ILockBytesVtbl", "IEnumFORMATETCVtbl",
-"IEnumSTATDATAVtbl", "IRootStorageVtbl", "IAdviseSinkVtbl", "AsyncIAdviseSinkVtbl", "IAdviseSink2Vtbl", "AsyncIAdviseSink2Vtbl", "IDataObjectVtbl",
-"IDataAdviseHolderVtbl", "IMessageFilterVtbl", "IClassActivatorVtbl", "IFillLockBytesVtbl", "IProgressNotifyVtbl", "ILayoutStorageVtbl",
-"IBlockingLockVtbl", "ITimeAndNoticeControlVtbl", "IOplockStorageVtbl", "IDirectWriterLockVtbl", "IUrlMonVtbl", "IForegroundTransferVtbl",
-"IThumbnailExtractorVtbl", "IDummyHICONIncluderVtbl", "IProcessLockVtbl", "ISurrogateServiceVtbl", "IInitializeSpyVtbl", "IApartmentShutdownVtbl",
-"IPersistMonikerVtbl", "IMonikerPropVtbl", "IBindProtocolVtbl", "IBindingVtbl", "IBindStatusCallbackVtbl", "IBindStatusCallbackExVtbl",
-"IAuthenticateVtbl", "IAuthenticateExVtbl", "IHttpNegotiateVtbl", "IHttpNegotiate2Vtbl", "IHttpNegotiate3Vtbl", "IWinInetFileStreamVtbl",
-"IWindowForBindingUIVtbl", "ICodeInstallVtbl", "IWinInetInfoVtbl", "IHttpSecurityVtbl", "IWinInetHttpInfoVtbl", "IWinInetHttpTimeoutsVtbl",
-"IBindHostVtbl", "IInternetVtbl", "IInternetBindInfoVtbl", "IInternetBindInfoExVtbl", "IInternetProtocolRootVtbl", "IInternetProtocolVtbl",
-"IInternetProtocolSinkVtbl", "IInternetProtocolSinkStackableVtbl", "IInternetSessionVtbl", "IInternetThreadSwitchVtbl", "IInternetPriorityVtbl",
-"IInternetProtocolInfoVtbl", "IInternetSecurityMgrSiteVtbl", "IInternetSecurityManagerVtbl", "IInternetHostSecurityManagerVtbl",
-"IInternetZoneManagerVtbl", "ISoftDistExtVtbl", "ICatalogFileInfoVtbl", "IDataFilterVtbl", "IEncodingFilterFactoryVtbl", "IWrappedProtocolVtbl", "IGetBindHandleVtbl",
-"IBindCallbackRedirectVtbl", "IOleAdviseHolderVtbl", "IOleCacheVtbl", "IOleCache2Vtbl", "IOleCacheControlVtbl", "IParseDisplayNameVtbl", "IOleContainerVtbl", "IOleClientSiteVtbl", "IOleObjectVtbl", "IOleWindowVtbl", "IOleLinkVtbl", "IOleItemContainerVtbl", "IOleInPlaceUIWindowVtbl", "IOleInPlaceActiveObjectVtbl", "IOleInPlaceFrameVtbl", "IOleInPlaceObjectVtbl",
-"IOleInPlaceSiteVtbl", "IContinueVtbl", "IViewObjectVtbl", "IViewObject2Vtbl",
-"IDropSourceVtbl", "IDropTargetVtbl", "IDropSourceNotifyVtbl", "IEnumOLEVERBVtbl",
-"IServiceProviderVtbl", "ICreateTypeInfoVtbl", "ICreateTypeInfo2Vtbl", "ICreateTypeLibVtbl",
-"ICreateTypeLib2Vtbl", "IDispatchVtbl", "IEnumVARIANTVtbl", "ITypeCompVtbl",
-"ITypeInfoVtbl", "ITypeInfo2Vtbl", "ITypeLibVtbl", "ITypeLib2Vtbl",
-"ITypeChangeEventsVtbl", "IErrorInfoVtbl", "ICreateErrorInfoVtbl", "ISupportErrorInfoVtbl",
-"ITypeFactoryVtbl", "ITypeMarshalVtbl", "IRecordInfoVtbl", "IErrorLogVtbl",
-"IPropertyBagVtbl", "HREFTYPE", "IPropertyStorageVtbl", "IPropertySetStorageVtbl",
-"IEnumSTATPROPSTGVtbl", "IEnumSTATPROPSETSTGVtbl", "PROPID", "LPOLESTREAMVTBL",
-                # }}}
-                ]
-        # TODO: why do typedefs for non dword pointers work but not for dword?
         output.write("""
         // This appears nowhere in the headers as a forward decl.
         // It appears as a member in a struct but that doesn't globally forward declare it, right?
@@ -443,8 +405,6 @@ def main():
         // Same
         struct lconv;
         """)
-        #output.write("typedef uint32_t DWORD;\n" + "".join(["typedef DWORD {};\n".format(x) for x in replaces]))
-        output.write("".join(["struct {};\n".format(x) for x in declares]))
 
     fns, structs, typedefs, enums, fwds = get_decls(tu, is_linux)
     # TODO: build tree and return it so that we can print them in proper order
