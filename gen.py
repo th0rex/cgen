@@ -4,32 +4,130 @@ from clang.cindex import *
 
 # Default header files {{{
 std_files = [
-    "assert.h", "complex.h", "ctype.h", "errno.h", "fenv.h", "float.h", "inttypes.h", "iso646.h",
-    "limits.h", "locale.h", "math.h", "setjmp.h", "signal.h", "stdalign.h", "stdarg.h",
-    "stdatomic.h", "stdbool.h", "stddef.h", "stdint.h", "stdio.h", "stdlib.h", "stdnoreturn.h",
-    "string.h", "tgmath.h", "threads.h", "time.h", "uchar.h", "wchar.h", "wctype.h",
+    "assert.h",
+    "complex.h",
+    "ctype.h",
+    "errno.h",
+    "fenv.h",
+    "float.h",
+    "inttypes.h",
+    "iso646.h",
+    "limits.h",
+    "locale.h",
+    "math.h",
+    "setjmp.h",
+    "signal.h",
+    "stdalign.h",
+    "stdarg.h",
+    "stdatomic.h",
+    "stdbool.h",
+    "stddef.h",
+    "stdint.h",
+    "stdio.h",
+    "stdlib.h",
+    "stdnoreturn.h",
+    "string.h",
+    "tgmath.h",
+    "threads.h",
+    "time.h",
+    "uchar.h",
+    "wchar.h",
+    "wctype.h",
 ]
 
 linux_files = [
-    "dirent.h" "sys/acct.h", "sys/acl.h",
+    "dirent.h"
+    "sys/acct.h",
+    "sys/acl.h",
     #"sys/asoundlib.h",
-    "sys/auxv.h", "sys/bitypes.h", "sys/capability.h", "sys/cdefs.h", "sys/debugreg.h", "sys/dir.h",
-    "sys/elf.h", "sys/epoll.h", "sys/errno.h", "sys/eventfd.h", "sys/fanotify.h", "sys/fcntl.h",
-    "sys/file.h", "sys/fsuid.h", "sys/gmon.h", "sys/gmon_out.h", "sys/inotify.h", "sys/ioctl.h",
-    "sys/io.h", "sys/ipc.h", "sys/kd.h", "sys/klog.h", "sys/mman.h", "sys/mount.h", "sys/msg.h",
-    "sys/mtio.h", "sys/param.h", "sys/pci.h", "sys/perm.h", "sys/personality.h", "sys/poll.h",
-    "sys/prctl.h", "sys/procfs.h", "sys/profil.h", "sys/ptrace.h", "sys/queue.h", "sys/quota.h",
-    "sys/random.h", "sys/raw.h", "sys/reboot.h", "sys/reg.h", "sys/resource.h", "sys/select.h",
-    "sys/sem.h", "sys/sendfile.h", "sys/shm.h", "sys/signalfd.h", "sys/signal.h", "sys/socket.h",
-    "sys/socketvar.h", "sys/soundcard.h", "sys/statfs.h", "sys/stat.h", "sys/statvfs.h",
-    "sys/stropts.h", "sys/swap.h", "sys/syscall.h", "sys/sysctl.h", "sys/sysinfo.h", "sys/syslog.h",
-    "sys/sysmacros.h", "sys/termios.h", "sys/timeb.h", "sys/time.h", "sys/timerfd.h", "sys/times.h",
-    "sys/timex.h", "sys/ttychars.h", "sys/ttydefaults.h", "sys/types.h", "sys/ucontext.h",
-    "sys/uio.h", "sys/un.h", "sys/unistd.h", "sys/user.h", "sys/ustat.h", "sys/utsname.h",
-    "sys/vfs.h", "sys/vlimit.h", "sys/vm86.h", "sys/vt.h", "sys/vtimes.h", "sys/wait.h",
+    "sys/auxv.h",
+    "sys/bitypes.h",
+    "sys/capability.h",
+    "sys/cdefs.h",
+    "sys/debugreg.h",
+    "sys/dir.h",
+    "sys/elf.h",
+    "sys/epoll.h",
+    "sys/errno.h",
+    "sys/eventfd.h",
+    "sys/fanotify.h",
+    "sys/fcntl.h",
+    "sys/file.h",
+    "sys/fsuid.h",
+    "sys/gmon.h",
+    "sys/gmon_out.h",
+    "sys/inotify.h",
+    "sys/ioctl.h",
+    "sys/io.h",
+    "sys/ipc.h",
+    "sys/kd.h",
+    "sys/klog.h",
+    "sys/mman.h",
+    "sys/mount.h",
+    "sys/msg.h",
+    "sys/mtio.h",
+    "sys/param.h",
+    "sys/pci.h",
+    "sys/perm.h",
+    "sys/personality.h",
+    "sys/poll.h",
+    "sys/prctl.h",
+    "sys/procfs.h",
+    "sys/profil.h",
+    "sys/ptrace.h",
+    "sys/queue.h",
+    "sys/quota.h",
+    "sys/random.h",
+    "sys/raw.h",
+    "sys/reboot.h",
+    "sys/reg.h",
+    "sys/resource.h",
+    "sys/select.h",
+    "sys/sem.h",
+    "sys/sendfile.h",
+    "sys/shm.h",
+    "sys/signalfd.h",
+    "sys/signal.h",
+    "sys/socket.h",
+    "sys/socketvar.h",
+    "sys/soundcard.h",
+    "sys/statfs.h",
+    "sys/stat.h",
+    "sys/statvfs.h",
+    "sys/stropts.h",
+    "sys/swap.h",
+    "sys/syscall.h",
+    "sys/sysctl.h",
+    "sys/sysinfo.h",
+    "sys/syslog.h",
+    "sys/sysmacros.h",
+    "sys/termios.h",
+    "sys/timeb.h",
+    "sys/time.h",
+    "sys/timerfd.h",
+    "sys/times.h",
+    "sys/timex.h",
+    "sys/ttychars.h",
+    "sys/ttydefaults.h",
+    "sys/types.h",
+    "sys/ucontext.h",
+    "sys/uio.h",
+    "sys/un.h",
+    "sys/unistd.h",
+    "sys/user.h",
+    "sys/ustat.h",
+    "sys/utsname.h",
+    "sys/vfs.h",
+    "sys/vlimit.h",
+    "sys/vm86.h",
+    "sys/vt.h",
+    "sys/vtimes.h",
+    "sys/wait.h",
     "sys/xattr.h",
 ]
+
 # }}}
+
 
 def parse_args():
     import sys
@@ -52,14 +150,22 @@ def parse_args():
 
     return (dirs, clang_args, is_linux)
 
+
 def create_dummy_file(dirs, is_linux):
     import os
 
     with open("dummy.c", mode="w") as dummy:
-        files = [f for d in dirs for f in os.listdir(d) if os.path.isfile(os.path.join(d, f))]
+        files = [
+            f for d in dirs for f in os.listdir(d)
+            if os.path.isfile(os.path.join(d, f))
+        ]
         if is_linux:
-            files = files + [os.path.join("/usr/include/", f) for f in std_files]
-            files = files + [os.path.join("/usr/include/", f) for f in linux_files]
+            files = files + [
+                os.path.join("/usr/include/", f) for f in std_files
+            ]
+            files = files + [
+                os.path.join("/usr/include/", f) for f in linux_files
+            ]
 
         if not is_linux:
             dummy.write("""#include "basetsd.h"\n""")
@@ -70,6 +176,7 @@ def create_dummy_file(dirs, is_linux):
         else:
             for f in files:
                 dummy.write("""#include "{}"\n""".format(f))
+
 
 def get_decls(tu, is_linux):
     def base_type(t):
@@ -96,8 +203,16 @@ def get_decls(tu, is_linux):
     def resolve_type(t):
         return t.get_canonical()
 
-    def format_type(t, n = None, expand = False, resolve = False, in_typedef_resolve = False, print_struct_name = True, c = None):
-        fmt = "{}{}".format("const " if t.is_const_qualified() else "", "volatile " if t.is_volatile_qualified() else "")
+    def format_type(t,
+                    n=None,
+                    expand=False,
+                    resolve=False,
+                    in_typedef_resolve=False,
+                    print_struct_name=True,
+                    c=None):
+        fmt = "{}{}".format("const "
+                            if t.is_const_qualified() else "", "volatile "
+                            if t.is_volatile_qualified() else "")
         n = " " + n if n != None and print_struct_name else ""
         if c is None:
             c = t.get_declaration()
@@ -115,29 +230,30 @@ def get_decls(tu, is_linux):
             return "void* " + n
 
         tbl = {
-            TypeKind.VOID            : "void",
-            TypeKind.BOOL            : "bool",
-            TypeKind.CHAR_U          : "char",
-            TypeKind.UCHAR           : "unsigned char",
-            TypeKind.USHORT          : "unsigned short",
-            TypeKind.UINT            : "unsigned int",
-            TypeKind.ULONG           : "unsigned long",
-            TypeKind.ULONGLONG       : "unsigned long long",
-            TypeKind.CHAR_S          : "char",
-            TypeKind.SCHAR           : "signed char",
-            TypeKind.SHORT           : "short",
-            TypeKind.INT             : "int",
-            TypeKind.LONG            : "long",
-            TypeKind.LONGLONG        : "long long",
-            TypeKind.FLOAT           : "float",
-            TypeKind.DOUBLE          : "double",
-            TypeKind.LONGDOUBLE      : "long double",
+            TypeKind.VOID: "void",
+            TypeKind.BOOL: "bool",
+            TypeKind.CHAR_U: "char",
+            TypeKind.UCHAR: "unsigned char",
+            TypeKind.USHORT: "unsigned short",
+            TypeKind.UINT: "unsigned int",
+            TypeKind.ULONG: "unsigned long",
+            TypeKind.ULONGLONG: "unsigned long long",
+            TypeKind.CHAR_S: "char",
+            TypeKind.SCHAR: "signed char",
+            TypeKind.SHORT: "short",
+            TypeKind.INT: "int",
+            TypeKind.LONG: "long",
+            TypeKind.LONGLONG: "long long",
+            TypeKind.FLOAT: "float",
+            TypeKind.DOUBLE: "double",
+            TypeKind.LONGDOUBLE: "long double",
         }
 
         if t.kind == TypeKind.POINTER:
             pt = t.get_pointee()
             c = pt.get_declaration()
-            if in_typedef_resolve and (c.kind == CursorKind.STRUCT_DECL or c.kind == CursorKind.UNION_DECL):
+            if in_typedef_resolve and (c.kind == CursorKind.STRUCT_DECL
+                                       or c.kind == CursorKind.UNION_DECL):
                 ty = "struct"
                 if c.kind == CursorKind.UNION_DECL:
                     ty = "union"
@@ -149,9 +265,10 @@ def get_decls(tu, is_linux):
                     return "void* {}".format(n)
             if pt.kind == TypeKind.FUNCTIONPROTO or pt.kind == TypeKind.FUNCTIONNOPROTO:
                 return "{}(*{})({})".format(
-                        format_type(pt.get_result(), expand=expand),
-                        n,
-                        ", ".join([format_type(t, expand=expand) for t in pt.argument_types()]))
+                    format_type(pt.get_result(), expand=expand), n, ", ".join([
+                        format_type(t, expand=expand)
+                        for t in pt.argument_types()
+                    ]))
             elif pt.kind == TypeKind.UNEXPOSED:
                 return format_type(pt, expand=expand, n=n[1:])
             elif c.kind == CursorKind.ENUM_DECL:
@@ -167,7 +284,12 @@ def get_decls(tu, is_linux):
                 return ""
             cano = t.get_canonical()
             #print(t.get_declaration().get_definition().type.kind, t.get_declaration().underlying_typedef_type.displayname)
-            return "typedef {};".format(format_type(t.get_declaration().underlying_typedef_type, n=t.get_typedef_name(), expand=True, in_typedef_resolve=True))
+            return "typedef {};".format(
+                format_type(
+                    t.get_declaration().underlying_typedef_type,
+                    n=t.get_typedef_name(),
+                    expand=True,
+                    in_typedef_resolve=True))
         elif t.kind == TypeKind.RECORD:
             ty = "struct"
             if c.kind == CursorKind.UNION_DECL:
@@ -178,31 +300,50 @@ def get_decls(tu, is_linux):
             if len(fields) == 0:
                 fields_str = "void* __unused;\n"
             else:
-                fields_str = "".join([format_type(c.type, c=c, expand=expand, n=c.displayname, in_typedef_resolve = True) + ";\n" for c in fields])
+                fields_str = "".join([
+                    format_type(
+                        c.type,
+                        c=c,
+                        expand=expand,
+                        n=c.displayname,
+                        in_typedef_resolve=True) + ";\n" for c in fields
+                ])
 
             return "{}{}{{\n{}}}{}".format(
-                    ty,
-                    # TODO: fix this line so we can remove the extra struct handling in typedefs
-                    n if not in_typedef_resolve else (" " + c.displayname if in_typedef_resolve and c.displayname != "" else ""),
-                    fields_str,
-                    n if in_typedef_resolve else "")
+                ty,
+                # TODO: fix this line so we can remove the extra struct handling in typedefs
+                n if not in_typedef_resolve else
+                (" " + c.displayname
+                 if in_typedef_resolve and c.displayname != "" else ""),
+                fields_str,
+                n if in_typedef_resolve else "")
         elif t.kind == TypeKind.TYPEDEF:
             return fmt + t.get_typedef_name() + n
         elif t.kind == TypeKind.INCOMPLETEARRAY:
-            return format_type(t.element_type, expand=expand, print_struct_name = False) + n + "[1]"
+            return format_type(
+                t.element_type, expand=expand,
+                print_struct_name=False) + n + "[1]"
         elif t.kind == TypeKind.CONSTANTARRAY:
-            return format_type(t.element_type, expand=expand, print_struct_name = False) + n + "[{}]".format(t.element_count)
+            return format_type(
+                t.element_type, expand=expand,
+                print_struct_name=False) + n + "[{}]".format(t.element_count)
         elif t.kind == TypeKind.ELABORATED:
             return t.spelling + n
         elif c.kind == CursorKind.ENUM_DECL:
             return "enum{}{{\n{}\n}}{}".format(
-                    n if not in_typedef_resolve else "",
-                    # TODO: cleanup when bn supports negative enum values
-                    ",\n".join(["{} = {}".format(x.displayname, x.enum_value if x.enum_value >= 0 else 2**(8*c.enum_type.get_size()) - x.enum_value) for x in c.get_children()]),
-                    n if in_typedef_resolve else "")
+                n if not in_typedef_resolve else "",
+                # TODO: cleanup when bn supports negative enum values
+                ",\n".join([
+                    "{} = {}".format(
+                        x.displayname, x.enum_value if x.enum_value >= 0 else
+                        2**(8 * c.enum_type.get_size()) - x.enum_value)
+                    for x in c.get_children()
+                ]),
+                n if in_typedef_resolve else "")
         elif t.kind in tbl:
             if c.is_bitfield() and c.displayname == "":
-                return fmt + tbl[t.kind] + " padding_{}".format(c.get_field_offsetof())
+                return fmt + tbl[t.kind] + " padding_{}".format(
+                    c.get_field_offsetof())
             # TODO: enable when binaryninja supports bitfields
             #elif c.is_bitfield():
             #    return fmt + tbl[t.kind] + "{}:{}".format(n, c.get_bitfield_width())
@@ -219,7 +360,7 @@ def get_decls(tu, is_linux):
             # WE HAVE TO HANDLE THIS?!
             print("------------------- UNHANDLED ", t.spelling)
             if "BSTR" in t.spelling:
-                "void*" # TODO: please help me
+                "void*"  # TODO: please help me
             elif "VARIANT_BOOL" in t.spelling:
                 return "short"
             elif "int" in t.spelling:
@@ -229,7 +370,7 @@ def get_decls(tu, is_linux):
             return ""
 
         print("Not handled: ", t.kind, ": ", t.spelling)
-        assert(False)
+        assert (False)
 
     def iter_children(i, t, sts):
         if t.kind == TypeKind.ELABORATED:
@@ -237,11 +378,11 @@ def get_decls(tu, is_linux):
 
         if t.kind == TypeKind.RECORD:
             decl = t.get_declaration()
-            sts.append((i-1, decl))
+            sts.append((i - 1, decl))
         elif t.kind == TypeKind.TYPEDEF:
             iter_children(i, t.get_canonical(), sts)
 
-    assert(tu.cursor.kind.is_translation_unit())
+    assert (tu.cursor.kind.is_translation_unit())
     forwards = []
     structs = []
     functions = []
@@ -250,9 +391,9 @@ def get_decls(tu, is_linux):
     already = set()
     # Sadly the clang API doesn't expose the noreturn attribute
     no_return = [
-        "exit", "_exit", "__stack_chk_fail", "pthread_exit", "abort", "err", "verr",
-        "quick_exit", "_Exit",
-        "errc", "verrc", "errx", "verrx", "__longjmp_chk", "longjmp", "siglongjmp"
+        "exit", "_exit", "__stack_chk_fail", "pthread_exit", "abort", "err",
+        "verr", "quick_exit", "_Exit", "errc", "verrc", "errx", "verrx",
+        "__longjmp_chk", "longjmp", "siglongjmp"
     ]
     for i, c in enumerate(tu.cursor.get_children()):
         if c.kind == CursorKind.STRUCT_DECL:
@@ -266,13 +407,16 @@ def get_decls(tu, is_linux):
             typedefs.append((i, c))
         elif c.kind == CursorKind.ENUM_DECL:
             enums.append((i, c))
-        if not (c.kind.is_declaration() and c.kind == CursorKind.FUNCTION_DECL):
+        if not (c.kind.is_declaration()
+                and c.kind == CursorKind.FUNCTION_DECL):
             continue
         ft = c.type
         if ft.kind != TypeKind.FUNCTIONPROTO and ft.kind != TypeKind.FUNCTIONNOPROTO:
-            print("no function proto ", c.kind, "---", ft.kind, "---", c.displayname, "---", c.spelling, "---", ft.spelling)
+            print("no function proto ", c.kind, "---", ft.kind, "---",
+                  c.displayname, "---", c.spelling, "---", ft.spelling)
             continue
-        assert(ft.kind == TypeKind.FUNCTIONPROTO or ft.kind == TypeKind.FUNCTIONNOPROTO)
+        assert (ft.kind == TypeKind.FUNCTIONPROTO
+                or ft.kind == TypeKind.FUNCTIONNOPROTO)
         if blocked(ft.get_result()):
             continue
 
@@ -287,7 +431,7 @@ def get_decls(tu, is_linux):
         args = []
         cont = False
         for p in c.get_arguments():
-            assert(p.kind == CursorKind.PARM_DECL)
+            assert (p.kind == CursorKind.PARM_DECL)
             a = p.type
             if blocked(a):
                 cont = True
@@ -314,20 +458,32 @@ def get_decls(tu, is_linux):
             name = name[1:]
 
         if is_linux:
-            functions.append(
-                (i, "{} {}({}){};".format(ret_type, name, ",".join(args), " __noreturn" if name in no_return else ""))
-            )
+            functions.append((i, "{} {}({}){};".format(
+                ret_type, name, ",".join(args), " __noreturn"
+                if name in no_return else "")))
         else:
             # Assume stdcall lul
-            functions.append(
-                (i, "{} __stdcall {}({}){};".format(ret_type, name, ",".join(args), " __noreturn" if name in no_return else ""))
-            )
+            cc = "__stdcall"
+            if any("__cdecl" in x.spelling for x in c.get_tokens()):
+                cc = "__cdecl"
+            functions.append((i, "{} {} {}({}){};".format(
+                ret_type, cc, name, ",".join(args), " __noreturn"
+                if name in no_return else "")))
 
     # Expand typedefs and add references to structs.
     tds = []
     block = [
-        "int8_t", "uint8_t", "int16_t", "uint16_t", "int32_t", "uint32_t", "size_t", "offset_t",
-        "int64_t", "uint64_t", "ssize_t",
+        "int8_t",
+        "uint8_t",
+        "int16_t",
+        "uint16_t",
+        "int32_t",
+        "uint32_t",
+        "size_t",
+        "offset_t",
+        "int64_t",
+        "uint64_t",
+        "ssize_t",
 
         # Windows shit
         "LPOLESTREAMVTBL",
@@ -371,17 +527,21 @@ def get_decls(tu, is_linux):
         # Can be removed once bn supports empty structs/unions:
         if len(list(st.type.get_fields())) == 0:
             already.add(st.displayname)
-            strcts.append((i, "{} {} {{ void* __unused; }};".format("struct" if st.kind == CursorKind.STRUCT_DECL else "union", st.displayname)))
+            strcts.append((i, "{} {} {{ void* __unused; }};".format(
+                "struct" if st.kind == CursorKind.STRUCT_DECL else "union",
+                st.displayname)))
             continue
         already.add(st.displayname)
-        strcts.append((i, format_type(st.type, n=st.displayname, expand=True) + ";"))
+        strcts.append(
+            (i, format_type(st.type, n=st.displayname, expand=True) + ";"))
 
     already = set()
     enms = []
     for i, en in enums:
         if en.displayname == "":
             continue
-        enms.append((i, format_type(en.type, n=en.displayname, expand=True) + ";"))
+        enms.append(
+            (i, format_type(en.type, n=en.displayname, expand=True) + ";"))
 
     already = set()
     fwds = []
@@ -391,6 +551,7 @@ def get_decls(tu, is_linux):
         fwds.append((i, "struct {};".format(fw.displayname)))
 
     return functions, strcts, tds, enms, fwds
+
 
 def main():
     dirs, clang_args, is_linux = parse_args()
@@ -418,12 +579,21 @@ def main():
     xs = sorted(fns + typedefs + structs + enums + fwds, key=lambda i: i[0])
 
     output.write("struct __locale_data { void* __unused; };\n")
-    blck = ["IRpcChannel", "IRpcStub", "I_RpcServerInqAddressChangeFn", "_MIDL_STUB_DESC", "RpcSmSwapClientAllocFree", "RpcSsSwapClientAllocFree",
-            "IViewObject",
-            # Appears twice for some reason
-            "VerSetConditionMask",
-            # We don't handle multi dimensional arrays correctly.
-            "tagINPUT_TRANSFORM", "_CRYPT_AES_128_KEY_STATE", "_CRYPT_AES_256_KEY_STATE"]
+    blck = [
+        "IRpcChannel",
+        "IRpcStub",
+        "I_RpcServerInqAddressChangeFn",
+        "_MIDL_STUB_DESC",
+        "RpcSmSwapClientAllocFree",
+        "RpcSsSwapClientAllocFree",
+        "IViewObject",
+        # Appears twice for some reason
+        "VerSetConditionMask",
+        # We don't handle multi dimensional arrays correctly.
+        "tagINPUT_TRANSFORM",
+        "_CRYPT_AES_128_KEY_STATE",
+        "_CRYPT_AES_256_KEY_STATE"
+    ]
     for _, x in xs:
         if not is_linux:
             done = False
@@ -437,6 +607,6 @@ def main():
 
     print("\n".join(map(repr, tu.diagnostics)))
 
+
 if __name__ == "__main__":
     main()
-
